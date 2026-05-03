@@ -8,6 +8,7 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     sourcemap: false,
+    chunkSizeWarningLimit: 800,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -16,9 +17,7 @@ export default defineConfig({
           if (id.includes('/@mdxeditor/') || id.includes('@mdxeditor')) return 'mdxeditor'
           if (id.includes('/@codemirror/') || id.includes('/codemirror/') || id.includes('cm6-theme-basic-light')) return 'codemirror'
           if (id.includes('/lexical/') || id.includes('@lexical')) return 'lexical'
-          if (id.includes('/@ant-design/icons')) return 'antd-icons'
-          if (id.includes('/@ant-design/') || id.includes('/antd/')) return 'antd'
-          if (id.includes('/rc-')) return 'antd-rc'
+          if (id.includes('/@ant-design/') || id.includes('/antd/') || id.includes('/rc-')) return 'antd'
           if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) return 'react'
           if (id.includes('/micromark') || id.includes('/remark-') || id.includes('/mdast-') || id.includes('/hast-') || id.includes('/unist-') || id.includes('/vfile') || id.includes('/unified/') || id.includes('/@mdx-js/')) return 'markdown'
         }
