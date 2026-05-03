@@ -2,10 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App as AntApp, Button, Card, ConfigProvider, Form, Input, Layout, List, Modal, Popconfirm, Select, Space, Switch, Tabs, Typography, Upload, message, theme } from 'antd'
 import type { UploadProps } from 'antd'
-import { MDXEditor, headingsPlugin, listsPlugin, quotePlugin, thematicBreakPlugin, markdownShortcutPlugin, toolbarPlugin, UndoRedo, BoldItalicUnderlineToggles, ListsToggle, BlockTypeSelect, CreateLink, InsertImage, imagePlugin, linkDialogPlugin, linkPlugin, codeBlockPlugin, codeMirrorPlugin, InsertCodeBlock, CodeToggle, ConditionalContents, ChangeCodeMirrorLanguage, Separator, InsertTable, tablePlugin, InsertThematicBreak } from '@mdxeditor/editor'
-import '@mdxeditor/editor/style.css'
 import './style.css'
 import { api, ACLRule, ACLSettings, Asset, NavItem, Page, SiteSettings } from './api'
+
+const MdxBodyEditor = React.lazy(() => import('./MdxBodyEditor'))
 
 const palettes = {
   slate: { colorPrimary: '#2563eb', colorBgLayout: '#f4f7fb', colorText: '#172033', colorBorder: '#d8dee9' },
@@ -304,6 +304,8 @@ function Root() {
     }
   }
 
+  const mdxEditorKey = [active?.slug || 'new', active?.updated_at || '', editorRev].join('-')
+
   return <ConfigProvider theme={cfg} getPopupContainer={trigger => trigger?.parentElement || document.body}><AntApp><Layout className="layout" style={adminVars}>
     <Layout.Sider className="sider" width={310} breakpoint="lg" collapsedWidth={0}>
       <div className="brand">UvooMiniCMS</div>
@@ -350,23 +352,7 @@ function Root() {
             <Form.Item name="markdown" label="Body" className="mdField">
               {sourceMode
                 ? <Input.TextArea rows={22} className="sourceEditor" value={md} onChange={e => form.setFieldValue('markdown', e.target.value)} />
-                : <MDXEditor key={`${active?.slug || 'new'}-${active?.updated_at || ''}-${editorRev}`} className={adminDark ? 'tinyMdx dark-theme' : 'tinyMdx'} contentEditableClassName="tinyMdxContent" markdown={md} onChange={v => form.setFieldValue('markdown', v)} plugins={[
-                  headingsPlugin(),
-                  listsPlugin(),
-                  quotePlugin(),
-                  thematicBreakPlugin(),
-                  linkPlugin(),
-                  linkDialogPlugin(),
-                  imagePlugin({ imageUploadHandler: uploadImageForEditor, imageAutocompleteSuggestions: imageSuggestions.length ? imageSuggestions : ['/uploads/'] }),
-                  tablePlugin(),
-                  codeBlockPlugin({ defaultCodeBlockLanguage: 'text' }),
-                  codeMirrorPlugin({ codeBlockLanguages: { text: 'Plain text', markdown: 'Markdown', python: 'Python', py: 'Python', javascript: 'JavaScript', typescript: 'TypeScript', jsx: 'JSX', tsx: 'TSX', html: 'HTML', css: 'CSS', json: 'JSON', bash: 'Shell', sh: 'Shell', go: 'Go', sql: 'SQL', yaml: 'YAML', yml: 'YAML', mermaid: 'Mermaid diagram' } }),
-                  markdownShortcutPlugin(),
-                  toolbarPlugin({toolbarContents: () => <ConditionalContents options={[
-                    { when: editor => editor?.editorType === 'codeblock', contents: () => <ChangeCodeMirrorLanguage /> },
-                    { fallback: () => <><UndoRedo /><Separator /><BoldItalicUnderlineToggles /><CodeToggle /><ListsToggle /><BlockTypeSelect /><Separator /><CreateLink /><InsertImage /><Separator /><InsertTable /><InsertThematicBreak /><InsertCodeBlock /></> }
-                  ]} />})
-                ]} />}
+                : <React.Suspense fallback={<div className="mdxLoading">Loading editor...</div>}><MdxBodyEditor editorKey={mdxEditorKey} adminDark={adminDark} markdown={md} onChange={v => form.setFieldValue('markdown', v)} uploadImage={uploadImageForEditor} imageSuggestions={imageSuggestions} /></React.Suspense>}
             </Form.Item>
           </Form>
           <Modal title="Browse uploads" open={mediaOpen} onCancel={() => setMediaOpen(false)} footer={null} width={920} className="mediaModal">

@@ -238,6 +238,16 @@ body,
   margin-top: 16px;
 }
 
+.mdxLoading {
+  min-height: 540px;
+  display: grid;
+  place-items: center;
+  color: var(--admin-muted);
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: 14px;
+}
+
 .mdField .mdxeditor {
   --basePageBg: var(--admin-surface);
   --baseBase: var(--admin-surface-2);
