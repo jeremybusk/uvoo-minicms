@@ -106,11 +106,23 @@ The packages install:
 - data/uploads: `/var/lib/uvoominicms`
 - systemd unit: `uvoominicms.service`
 
-The package creates a locked-down `uvoominicms` system user, enables the systemd service, and leaves the service stopped until the admin password is changed. After install:
+The package creates a locked-down `uvoominicms` system user, generates a strong `CMS_ADMIN_PASS` when the packaged default is still present, enables the systemd service, and starts it automatically. The generated password is printed during install and stored in:
+
+```text
+/etc/uvoominicms/uvoominicms.env
+```
+
+Show it with:
+
+```bash
+sudo grep ^CMS_ADMIN_PASS= /etc/uvoominicms/uvoominicms.env
+```
+
+On upgrade, the package preserves the existing config and restarts the service. To rotate the admin password later, edit `CMS_ADMIN_PASS` and restart:
 
 ```bash
 sudo editor /etc/uvoominicms/uvoominicms.env
-sudo systemctl start uvoominicms
+sudo systemctl restart uvoominicms
 ```
 
 ## Docker
