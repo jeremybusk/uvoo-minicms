@@ -161,16 +161,26 @@ func (s *Service) SaveACL(ctx context.Context, req *connect.Request[structpb.Str
 	return ok(map[string]any{"acl": aclMap(settings, rules)})
 }
 func (s *Service) ImportPreview(ctx context.Context, req *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error) {
-	result, err := importer.Importer{}.Preview(ctx, importOptions(fields(req)))
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	result, err := importer.Importer{Client: &http.Client{Timeout: 4 * time.Second}}.Preview(ctx, importOptions(fields(req)))
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, connect.NewError(connect.CodeDeadlineExceeded, errors.New("import preview timed out after 15 seconds; the source site did not respond quickly enough"))
+		}
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	return ok(map[string]any{"import": importResultMap(result)})
 }
 func (s *Service) ImportSite(ctx context.Context, req *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
 	opts := importOptions(fields(req))
-	result, err := importer.Importer{}.Import(ctx, s.Store, s.SiteName, opts)
+	result, err := importer.Importer{Client: &http.Client{Timeout: 10 * time.Second}}.Import(ctx, s.Store, s.SiteName, opts)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, connect.NewError(connect.CodeDeadlineExceeded, errors.New("import timed out after 3 minutes; try a smaller max page count or check the source site"))
+		}
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	if err := s.markImportExisting(ctx, &result); err != nil {

@@ -23,6 +23,7 @@ import (
 )
 
 const defaultMaxPages = 50
+const defaultRequestTimeout = 6 * time.Second
 
 type Importer struct {
 	Client *http.Client
@@ -111,6 +112,8 @@ func (i Importer) Preview(ctx context.Context, opts Options) (Result, error) {
 		wp.BaseURL = base.String()
 		wp.PreviewLimit = opts.MaxPages
 		return wp, nil
+	} else if ctx.Err() != nil {
+		return result, ctx.Err()
 	}
 	fallback, err := i.previewSitemap(ctx, base, opts)
 	if err != nil {
@@ -310,6 +313,9 @@ func (i Importer) previewSitemap(ctx context.Context, base *url.URL, opts Option
 	var urls []string
 	var sitemapURL string
 	for _, sm := range sitemaps {
+		if ctx.Err() != nil {
+			return Result{Source: "sitemap", BaseURL: base.String(), SitemapURL: sitemapURL}, ctx.Err()
+		}
 		found, err := i.readSitemap(ctx, sm, base, opts.MaxPages-len(urls))
 		if err != nil {
 			continue
@@ -323,9 +329,15 @@ func (i Importer) previewSitemap(ctx context.Context, base *url.URL, opts Option
 		}
 	}
 	if len(urls) == 0 {
+		if ctx.Err() != nil {
+			return Result{Source: "sitemap", BaseURL: base.String(), SitemapURL: sitemapURL}, ctx.Err()
+		}
 		urls = i.discoverHomepageLinks(ctx, base, opts.MaxPages)
 	}
 	if len(urls) == 0 {
+		if ctx.Err() != nil {
+			return Result{Source: "sitemap", BaseURL: base.String(), SitemapURL: sitemapURL}, ctx.Err()
+		}
 		return Result{Source: "sitemap", BaseURL: base.String()}, errors.New("no importable URLs found")
 	}
 	pages := make([]Page, 0, len(urls))
@@ -549,7 +561,7 @@ func (i Importer) getJSON(ctx context.Context, rawURL string, target any) error 
 func (i Importer) getBytes(ctx context.Context, rawURL string) ([]byte, string, error) {
 	client := i.Client
 	if client == nil {
-		client = &http.Client{Timeout: 20 * time.Second}
+		client = &http.Client{Timeout: defaultRequestTimeout}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {

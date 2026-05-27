@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestPreviewWordPressImportsPagesPostsAndMenu(t *testing.T) {
@@ -85,6 +86,25 @@ func TestPreviewWordPressImportsPagesPostsAndMenu(t *testing.T) {
 	}
 	if len(result.Menu) != 1 || result.Menu[0].URL != "/about" {
 		t.Fatalf("unexpected menu: %#v", result.Menu)
+	}
+}
+
+func TestPreviewHonorsContextDeadline(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(time.Second)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := (Importer{Client: server.Client()}).Preview(ctx, Options{URL: server.URL, MaxPages: 5})
+	if err == nil {
+		t.Fatal("expected deadline error")
+	}
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+		t.Fatalf("preview did not stop promptly: %s", elapsed)
 	}
 }
 
