@@ -46,10 +46,46 @@ export type SiteSettings = {
   search_enabled:boolean
   nav_layout:'top'|'side'
 }
+export type ImportPage = {
+  slug:string
+  path:string
+  title:string
+  meta_description:string
+  content_type:'page'|'post'
+  tags:string
+  markdown:string
+  source_url:string
+  published:boolean
+  exists:boolean
+}
+export type ImportOptions = {
+  url:string
+  max_pages:number
+  include_posts:boolean
+  import_menu:boolean
+  publish:boolean
+  update_existing:boolean
+  download_images:boolean
+}
+export type ImportResult = {
+  source:string
+  base_url:string
+  pages:ImportPage[]
+  menu:NavItem[]
+  imported:number
+  skipped:number
+  errors:string[]
+  existing:number
+  wordpress:boolean
+  sitemap_url:string
+  preview_limit:number
+}
 
-const base = '/cms.v1.CMSService/'
+const baseURL = new URL('/cms.v1.CMSService/', window.location.href)
+baseURL.username = ''
+baseURL.password = ''
 async function rpc<T>(name: string, body: Record<string, unknown> = {}): Promise<T> {
-  const r = await fetch(base + name, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const r = await fetch(new URL(name, baseURL).toString(), { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   if (!r.ok) throw new Error(await r.text())
   return r.json()
 }
@@ -62,6 +98,9 @@ export const api = {
   saveSettings: (settings: SiteSettings) => rpc<{settings:SiteSettings}>('SaveSettings', settings),
   listAssets: () => rpc<{assets:Asset[]}>('ListAssets'),
   uploadFile: (name:string, data:string) => rpc<{asset:Asset}>('UploadFile', { name, data }),
+  setSiteImage: (kind:'logo'|'favicon', name:string, data:string, url = '') => rpc<{asset:Asset, settings:SiteSettings}>('SetSiteImage', { kind, name, data, url }),
   getACL: () => rpc<{acl:ACLSettings}>('GetACL'),
-  saveACL: (acl: ACLSettings) => rpc<{acl:ACLSettings}>('SaveACL', acl)
+  saveACL: (acl: ACLSettings) => rpc<{acl:ACLSettings}>('SaveACL', acl),
+  importPreview: (opts: ImportOptions) => rpc<{import:ImportResult}>('ImportPreview', opts),
+  importSite: (opts: ImportOptions) => rpc<{import:ImportResult}>('ImportSite', opts)
 }

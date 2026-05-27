@@ -466,7 +466,7 @@ func DefaultSettings(siteName string) Settings {
 		AdminPrimaryColor:    "#386bc0",
 		AdminSecondaryColor:  "#64748b",
 		AdminPalette:         "slate",
-		FooterMarkdown:       "© 2026 " + siteName + ". All rights reserved.",
+		FooterMarkdown:       fmt.Sprintf("© %d %s. All rights reserved.", time.Now().UTC().Year(), siteName),
 		LogoEnabled:          true,
 		FaviconEnabled:       true,
 		MenuEnabled:          true,

@@ -1,12 +1,22 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
+	"image/png"
+	"io"
+	"math"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -15,6 +25,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 	"uvoominicms/internal/db"
+	"uvoominicms/internal/importer"
 )
 
 type Service struct {
@@ -43,6 +54,16 @@ func boolean(m map[string]any, k string) bool {
 		return v
 	}
 	return false
+}
+func number(m map[string]any, k string) int {
+	switch v := m[k].(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	default:
+		return 0
+	}
 }
 
 func (s *Service) Health(ctx context.Context, _ *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error) {
@@ -149,6 +170,41 @@ func (s *Service) SaveACL(ctx context.Context, req *connect.Request[structpb.Str
 	}
 	return ok(map[string]any{"acl": aclMap(settings, rules)})
 }
+func (s *Service) ImportPreview(ctx context.Context, req *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	opts := importOptions(fields(req))
+	opts.PreviewOnly = true
+	result, err := importer.Importer{Client: &http.Client{Timeout: 4 * time.Second}}.Preview(ctx, opts)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, connect.NewError(connect.CodeDeadlineExceeded, errors.New("import preview timed out after 15 seconds; the source site did not respond quickly enough"))
+		}
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	return ok(map[string]any{"import": importResultMap(result)})
+}
+func (s *Service) ImportSite(ctx context.Context, req *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
+	opts := importOptions(fields(req))
+	if opts.DownloadImages {
+		if err := ensureWritableDir(s.UploadDir); err != nil {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("upload directory %q is not writable: %w; run with -uploads set to a writable directory or fix ownership/permissions", s.UploadDir, err))
+		}
+	}
+	result, err := importer.Importer{Client: &http.Client{Timeout: 10 * time.Second}}.Import(ctx, s.Store, s.UploadDir, s.SiteName, opts)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, connect.NewError(connect.CodeDeadlineExceeded, errors.New("import timed out after 3 minutes; try a smaller max page count or check the source site"))
+		}
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	if err := s.markImportExisting(ctx, &result); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return ok(map[string]any{"import": importResultMap(result)})
+}
 func (s *Service) UploadFile(ctx context.Context, req *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error) {
 	m := fields(req)
 	name := safeName(str(m, "name"))
@@ -170,22 +226,171 @@ func (s *Service) UploadFile(ctx context.Context, req *connect.Request[structpb.
 	if int64(len(data)) > s.MaxUploadBytes {
 		return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("upload too large"))
 	}
-	day := time.Now().UTC().Format("2006/01/02")
-	dir := filepath.Join(s.UploadDir, day)
-	if err := os.MkdirAll(dir, 0750); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
 	name = time.Now().UTC().Format("150405.000-") + name
-	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, data, 0640); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	url := "/uploads/" + day + "/" + name
-	a, err := s.Store.InsertAsset(ctx, name, path, url, int64(len(data)))
+	a, err := s.writeUploadAsset(ctx, name, data)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return ok(map[string]any{"asset": assetMap(a)})
+}
+func (s *Service) SetSiteImage(ctx context.Context, req *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error) {
+	m := fields(req)
+	kind := strings.ToLower(str(m, "kind"))
+	if kind != "logo" && kind != "favicon" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("kind must be logo or favicon"))
+	}
+	data, err := siteImageBytes(ctx, str(m, "data"), str(m, "url"), s.MaxUploadBytes)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	img, format, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("image must be a PNG or JPEG"))
+	}
+	if format != "png" && format != "jpeg" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("image must be a PNG or JPEG"))
+	}
+	encoded, ext, err := optimizeSiteImage(kind, img, format)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	if int64(len(encoded)) > s.MaxUploadBytes {
+		return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("optimized image is too large"))
+	}
+	name := identityImageName(kind, firstNonEmpty(str(m, "name"), pathBaseFromURL(str(m, "url"))), ext)
+	asset, err := s.writeUploadAsset(ctx, name, encoded)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	settings, err := s.Store.GetSettings(ctx, s.SiteName)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if kind == "logo" {
+		settings.LogoURL = asset.URL
+		settings.LogoEnabled = true
+	} else {
+		settings.FaviconURL = asset.URL
+		settings.FaviconEnabled = true
+	}
+	settings, err = s.Store.SaveSettings(ctx, settings)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return ok(map[string]any{"asset": assetMap(asset), "settings": settingsMap(settings)})
+}
+
+func (s *Service) writeUploadAsset(ctx context.Context, name string, data []byte) (db.Asset, error) {
+	day := time.Now().UTC().Format("2006/01/02")
+	dir := filepath.Join(s.UploadDir, day)
+	if err := os.MkdirAll(dir, 0750); err != nil {
+		return db.Asset{}, err
+	}
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, data, 0640); err != nil {
+		return db.Asset{}, err
+	}
+	url := "/uploads/" + day + "/" + name
+	return s.Store.InsertAsset(ctx, name, path, url, int64(len(data)))
+}
+
+func importOptions(m map[string]any) importer.Options {
+	maxPages := number(m, "max_pages")
+	if maxPages <= 0 {
+		maxPages = 50
+	}
+	return importer.Options{
+		URL:            str(m, "url"),
+		MaxPages:       maxPages,
+		IncludePosts:   boolean(m, "include_posts"),
+		ImportMenu:     boolean(m, "import_menu"),
+		Publish:        boolean(m, "publish"),
+		UpdateExisting: boolean(m, "update_existing"),
+		DownloadImages: boolean(m, "download_images"),
+	}
+}
+
+func ensureWritableDir(dir string) error {
+	if err := os.MkdirAll(dir, 0750); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, ".write-test-*")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	if err := f.Close(); err != nil {
+		_ = os.Remove(name)
+		return err
+	}
+	return os.Remove(name)
+}
+
+func (s *Service) markImportExisting(ctx context.Context, result *importer.Result) error {
+	pages, err := s.Store.ListPages(ctx)
+	if err != nil {
+		return err
+	}
+	bySlug := map[string]bool{}
+	byPath := map[string]bool{}
+	for _, page := range pages {
+		bySlug[page.Slug] = true
+		byPath[page.Path] = true
+	}
+	result.Existing = 0
+	for i := range result.Pages {
+		exists := bySlug[result.Pages[i].Slug] || byPath[result.Pages[i].Path]
+		result.Pages[i].Exists = exists
+		if exists {
+			result.Existing++
+		}
+	}
+	return nil
+}
+
+func importResultMap(result importer.Result) map[string]any {
+	pages := make([]any, 0, len(result.Pages))
+	for _, page := range result.Pages {
+		pages = append(pages, map[string]any{
+			"slug":             page.Slug,
+			"path":             page.Path,
+			"title":            page.Title,
+			"meta_description": page.MetaDescription,
+			"content_type":     page.ContentType,
+			"tags":             page.Tags,
+			"source_url":       page.SourceURL,
+			"published":        page.Published,
+			"exists":           page.Exists,
+		})
+	}
+	menu := make([]any, 0, len(result.Menu))
+	for _, item := range result.Menu {
+		menu = append(menu, map[string]any{
+			"id":        item.ID,
+			"parent_id": item.ParentID,
+			"label":     item.Label,
+			"url":       item.URL,
+			"external":  item.External,
+			"enabled":   item.Enabled,
+		})
+	}
+	errors := make([]any, 0, len(result.Errors))
+	for _, err := range result.Errors {
+		errors = append(errors, err)
+	}
+	return map[string]any{
+		"source":        result.Source,
+		"base_url":      result.BaseURL,
+		"pages":         pages,
+		"menu":          menu,
+		"imported":      result.Imported,
+		"skipped":       result.Skipped,
+		"errors":        errors,
+		"existing":      result.Existing,
+		"wordpress":     result.WordPress,
+		"sitemap_url":   result.SitemapURL,
+		"preview_limit": result.PreviewLimit,
+	}
 }
 
 func pageMap(p db.Page, body bool) map[string]any {
@@ -487,8 +692,13 @@ func cleanID(s string) string {
 	return slugRe.ReplaceAllString(strings.ToLower(s), "-")
 }
 func cleanAssetURL(s string) string {
+	s = strings.TrimSpace(s)
 	if strings.HasPrefix(s, "/uploads/") {
 		return s
+	}
+	u, err := url.Parse(s)
+	if err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" {
+		return u.String()
 	}
 	return ""
 }
@@ -539,6 +749,204 @@ func allowedUpload(name string) bool {
 	default:
 		return false
 	}
+}
+
+func decodeDataURL(dataURL string, maxBytes int64) ([]byte, error) {
+	if !strings.Contains(dataURL, ",") {
+		return nil, errors.New("data URL required")
+	}
+	parts := strings.SplitN(dataURL, ",", 2)
+	if !strings.Contains(strings.ToLower(parts[0]), ";base64") {
+		return nil, errors.New("base64 data URL required")
+	}
+	if maxBytes > 0 && int64(len(parts[1])) > maxBytes*2 {
+		return nil, errors.New("upload too large")
+	}
+	data, err := base64.StdEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, err
+	}
+	if maxBytes > 0 && int64(len(data)) > maxBytes {
+		return nil, errors.New("upload too large")
+	}
+	return data, nil
+}
+
+func siteImageBytes(ctx context.Context, dataURL, rawURL string, maxBytes int64) ([]byte, error) {
+	if strings.TrimSpace(dataURL) != "" {
+		return decodeDataURL(dataURL, maxBytes)
+	}
+	rawURL = strings.TrimSpace(rawURL)
+	if rawURL == "" {
+		return nil, errors.New("image data or URL required")
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return nil, errors.New("valid http or https image URL required")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "UvooMiniCMS Admin/1.0")
+	req.Header.Set("Accept", "image/png,image/jpeg;q=0.9,*/*;q=0.1")
+	client := &http.Client{Timeout: 12 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("GET %s: %s", u.String(), resp.Status)
+	}
+	limit := maxBytes
+	if limit <= 0 {
+		limit = 8 << 20
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > limit {
+		return nil, errors.New("downloaded image is too large")
+	}
+	return body, nil
+}
+
+func pathBaseFromURL(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return ""
+	}
+	return path.Base(u.Path)
+}
+
+func identityImageName(kind, original, outExt string) string {
+	base := cleanSlug(strings.TrimSuffix(filepath.Base(original), filepath.Ext(original)))
+	if base == "" {
+		base = kind
+	}
+	return fmt.Sprintf("%s-%s-%s%s", kind, time.Now().UTC().Format("150405.000"), base, outExt)
+}
+
+func optimizeSiteImage(kind string, src image.Image, format string) ([]byte, string, error) {
+	bounds := src.Bounds()
+	if bounds.Dx() <= 0 || bounds.Dy() <= 0 {
+		return nil, "", errors.New("image has invalid dimensions")
+	}
+	var out image.Image
+	ext := ".png"
+	if kind == "favicon" {
+		out = resizeCover(src, 64, 64)
+	} else {
+		out = resizeContain(src, 512, 160, false)
+		if format == "jpeg" {
+			ext = ".jpg"
+		}
+	}
+	var b bytes.Buffer
+	if ext == ".jpg" {
+		if err := jpeg.Encode(&b, out, &jpeg.Options{Quality: 86}); err != nil {
+			return nil, "", err
+		}
+	} else if err := png.Encode(&b, out); err != nil {
+		return nil, "", err
+	}
+	return b.Bytes(), ext, nil
+}
+
+func resizeContain(src image.Image, maxW, maxH int, allowUpscale bool) *image.RGBA {
+	b := src.Bounds()
+	w, h := b.Dx(), b.Dy()
+	scale := math.Min(float64(maxW)/float64(w), float64(maxH)/float64(h))
+	if !allowUpscale && scale > 1 {
+		scale = 1
+	}
+	dstW := maxInt(1, int(math.Round(float64(w)*scale)))
+	dstH := maxInt(1, int(math.Round(float64(h)*scale)))
+	return resizeRect(src, b, dstW, dstH)
+}
+
+func resizeCover(src image.Image, dstW, dstH int) *image.RGBA {
+	b := src.Bounds()
+	sw, sh := b.Dx(), b.Dy()
+	srcRatio := float64(sw) / float64(sh)
+	dstRatio := float64(dstW) / float64(dstH)
+	crop := b
+	if srcRatio > dstRatio {
+		cropW := maxInt(1, int(math.Round(float64(sh)*dstRatio)))
+		x0 := b.Min.X + (sw-cropW)/2
+		crop = image.Rect(x0, b.Min.Y, x0+cropW, b.Max.Y)
+	} else if srcRatio < dstRatio {
+		cropH := maxInt(1, int(math.Round(float64(sw)/dstRatio)))
+		y0 := b.Min.Y + (sh-cropH)/2
+		crop = image.Rect(b.Min.X, y0, b.Max.X, y0+cropH)
+	}
+	return resizeRect(src, crop, dstW, dstH)
+}
+
+func resizeRect(src image.Image, rect image.Rectangle, dstW, dstH int) *image.RGBA {
+	dst := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
+	for y := 0; y < dstH; y++ {
+		sy := float64(rect.Min.Y) + (float64(y)+0.5)*float64(rect.Dy())/float64(dstH) - 0.5
+		for x := 0; x < dstW; x++ {
+			sx := float64(rect.Min.X) + (float64(x)+0.5)*float64(rect.Dx())/float64(dstW) - 0.5
+			dst.Set(x, y, bilinearAt(src, rect, sx, sy))
+		}
+	}
+	return dst
+}
+
+func bilinearAt(src image.Image, rect image.Rectangle, sx, sy float64) color.NRGBA {
+	x0 := clampInt(int(math.Floor(sx)), rect.Min.X, rect.Max.X-1)
+	y0 := clampInt(int(math.Floor(sy)), rect.Min.Y, rect.Max.Y-1)
+	x1 := clampInt(x0+1, rect.Min.X, rect.Max.X-1)
+	y1 := clampInt(y0+1, rect.Min.Y, rect.Max.Y-1)
+	tx := clampFloat(sx-float64(x0), 0, 1)
+	ty := clampFloat(sy-float64(y0), 0, 1)
+	c00 := color.NRGBAModel.Convert(src.At(x0, y0)).(color.NRGBA)
+	c10 := color.NRGBAModel.Convert(src.At(x1, y0)).(color.NRGBA)
+	c01 := color.NRGBAModel.Convert(src.At(x0, y1)).(color.NRGBA)
+	c11 := color.NRGBAModel.Convert(src.At(x1, y1)).(color.NRGBA)
+	return color.NRGBA{
+		R: blendByte(c00.R, c10.R, c01.R, c11.R, tx, ty),
+		G: blendByte(c00.G, c10.G, c01.G, c11.G, tx, ty),
+		B: blendByte(c00.B, c10.B, c01.B, c11.B, tx, ty),
+		A: blendByte(c00.A, c10.A, c01.A, c11.A, tx, ty),
+	}
+}
+
+func blendByte(c00, c10, c01, c11 uint8, tx, ty float64) uint8 {
+	top := float64(c00)*(1-tx) + float64(c10)*tx
+	bottom := float64(c01)*(1-tx) + float64(c11)*tx
+	return uint8(math.Round(top*(1-ty) + bottom*ty))
+}
+
+func clampInt(v, minValue, maxValue int) int {
+	if v < minValue {
+		return minValue
+	}
+	if v > maxValue {
+		return maxValue
+	}
+	return v
+}
+
+func clampFloat(v, minValue, maxValue float64) float64 {
+	if v < minValue {
+		return minValue
+	}
+	if v > maxValue {
+		return maxValue
+	}
+	return v
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func JSONError(w http.ResponseWriter, code int, msg string) { http.Error(w, msg, code) }

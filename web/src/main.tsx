@@ -2,10 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App as AntApp, Button, Card, ConfigProvider, Form, Input, Layout, List, Modal, Popconfirm, Select, Space, Switch, Tabs, Typography, Upload, message, theme } from 'antd'
 import type { UploadProps } from 'antd'
-import { MDXEditor, headingsPlugin, listsPlugin, quotePlugin, thematicBreakPlugin, markdownShortcutPlugin, toolbarPlugin, UndoRedo, BoldItalicUnderlineToggles, ListsToggle, BlockTypeSelect, CreateLink, InsertImage, imagePlugin, linkDialogPlugin, linkPlugin, codeBlockPlugin, codeMirrorPlugin, InsertCodeBlock, CodeToggle, ConditionalContents, ChangeCodeMirrorLanguage, Separator, InsertTable, tablePlugin, InsertThematicBreak } from '@mdxeditor/editor'
-import '@mdxeditor/editor/style.css'
 import './style.css'
-import { api, ACLRule, ACLSettings, Asset, NavItem, Page, SiteSettings } from './api'
+import { api, ACLRule, ACLSettings, Asset, ImportOptions, ImportResult, NavItem, Page, SiteSettings } from './api'
+
+const MdxBodyEditor = React.lazy(() => import('./MdxBodyEditor'))
 
 const palettes = {
   slate: { colorPrimary: '#2563eb', colorBgLayout: '#f4f7fb', colorText: '#172033', colorBorder: '#d8dee9' },
@@ -15,6 +15,7 @@ const palettes = {
 }
 
 type Palette = keyof typeof palettes | 'custom'
+type IdentityKind = 'logo' | 'favicon'
 
 function slugify(s:string) { return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') }
 function pathify(s:string) {
@@ -24,6 +25,9 @@ function pathify(s:string) {
 }
 function freshPage() {
   return { slug:'', path:'', title:'', meta_description:'', content_type:'page', tags:'', markdown:'# Untitled\n', published:false } as Page
+}
+function defaultFooter(siteName = 'UvooMiniCMS') {
+  return `© ${new Date().getUTCFullYear()} ${siteName}. All rights reserved.`
 }
 function newID() {
   return globalThis.crypto?.randomUUID?.() || `item-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -38,6 +42,14 @@ function isImage(url:string) {
 }
 function assetMarkdown(asset: Asset) {
   return isImage(asset.url) ? `![${asset.name}](${asset.url})` : `[${asset.name}](${asset.url})`
+}
+function readFileData(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
 }
 const emptyACL: ACLSettings = {
   admin_default: 'allow',
@@ -69,10 +81,26 @@ function Root() {
   const [publicPrimary, setPublicPrimary] = useState('#386bc0')
   const [publicSecondary, setPublicSecondary] = useState('#64748b')
   const [publicHeaderStyle, setPublicHeaderStyle] = useState<'neutral'|'accent-line'|'accent-bg'>('neutral')
+  const [footerEnabled, setFooterEnabled] = useState(true)
+  const [footerMarkdown, setFooterMarkdown] = useState(defaultFooter())
+  const [importURL, setImportURL] = useState('')
+  const [importMaxPages, setImportMaxPages] = useState(50)
+  const [importIncludePosts, setImportIncludePosts] = useState(true)
+  const [importMenu, setImportMenu] = useState(true)
+  const [importPublish, setImportPublish] = useState(true)
+  const [importUpdateExisting, setImportUpdateExisting] = useState(false)
+  const [importDownloadImages, setImportDownloadImages] = useState(true)
+  const [importPreview, setImportPreview] = useState<ImportResult | null>(null)
+  const [previewingImport, setPreviewingImport] = useState(false)
+  const [runningImport, setRunningImport] = useState(false)
+  const [identityUploading, setIdentityUploading] = useState<IdentityKind | ''>('')
+  const [identitySourceURL, setIdentitySourceURL] = useState<Record<IdentityKind, string>>({ logo: '', favicon: '' })
   const [form] = Form.useForm()
   const [settingsForm] = Form.useForm<SiteSettings>()
   const md = Form.useWatch('markdown', form) ?? ''
   const menuItems = Form.useWatch('menu', settingsForm) || []
+  const logoURL = Form.useWatch('logo_url', settingsForm) || ''
+  const faviconURL = Form.useWatch('favicon_url', settingsForm) || ''
   const selectedPalette = palette === 'custom'
     ? { ...palettes.slate, colorPrimary: customPrimary }
     : palettes[palette]
@@ -121,6 +149,8 @@ function Root() {
     setPublicPrimary(r.settings.public_primary_color || '#386bc0')
     setPublicSecondary(r.settings.public_secondary_color || '#64748b')
     setPublicHeaderStyle(r.settings.public_header_style || 'neutral')
+    setFooterEnabled(r.settings.footer_enabled !== false)
+    setFooterMarkdown(r.settings.footer_markdown || defaultFooter(r.settings.site_name))
   }
   async function loadAssets() {
     setLoadingAssets(true)
@@ -179,6 +209,8 @@ function Root() {
       setPublicPrimary(r.settings.public_primary_color || '#386bc0')
       setPublicSecondary(r.settings.public_secondary_color || '#64748b')
       setPublicHeaderStyle(r.settings.public_header_style || 'neutral')
+      setFooterEnabled(r.settings.footer_enabled !== false)
+      setFooterMarkdown(r.settings.footer_markdown || defaultFooter(r.settings.site_name))
       setCustomSecondary(r.settings.admin_secondary_color || '#64748b')
       message.success('Site settings saved')
     } catch(e:any) {
@@ -233,6 +265,43 @@ function Root() {
     setSourceMode(false)
     setEditorRev(rev => rev + 1)
   }
+  function currentImportOptions(): ImportOptions {
+    return {
+      url: importURL,
+      max_pages: importMaxPages,
+      include_posts: importIncludePosts,
+      import_menu: importMenu,
+      publish: importPublish,
+      update_existing: importUpdateExisting,
+      download_images: importDownloadImages
+    }
+  }
+  async function previewImportSite() {
+    setPreviewingImport(true)
+    try {
+      const r = await api.importPreview(currentImportOptions())
+      setImportPreview(r.import)
+      message.success(`Found ${r.import.pages.length} page(s)`)
+    } catch(e:any) {
+      message.error(e.message)
+    } finally {
+      setPreviewingImport(false)
+    }
+  }
+  async function runImportSite() {
+    setRunningImport(true)
+    try {
+      const r = await api.importSite(currentImportOptions())
+      setImportPreview(r.import)
+      await loadPages()
+      await loadSettings()
+      message.success(`Imported ${r.import.imported} page(s)`)
+    } catch(e:any) {
+      message.error(e.message)
+    } finally {
+      setRunningImport(false)
+    }
+  }
 
   useEffect(() => {
     loadPages().catch(e => message.error(e.message))
@@ -247,12 +316,7 @@ function Root() {
   }, [adminVars])
 
   async function upload(file: File) {
-    const data = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(String(reader.result))
-      reader.onerror = () => reject(reader.error)
-      reader.readAsDataURL(file)
-    })
+    const data = await readFileData(file)
     return api.uploadFile(file.name, data)
   }
   async function uploadImageForEditor(file: File) {
@@ -279,19 +343,41 @@ function Root() {
       return false
     }
   }
-  function settingsUploadProps(field: 'logo_url' | 'favicon_url'): UploadProps {
+  function identityUploadProps(kind: IdentityKind): UploadProps {
     return {
       showUploadList: false,
-      accept: field === 'favicon_url' ? '.ico,.png,.jpg,.jpeg,.webp' : '.png,.jpg,.jpeg,.webp,.avif',
+      accept: '.png,.jpg,.jpeg',
       beforeUpload(file) {
-        upload(file).then(r => {
+        const ok = /^image\/(png|jpeg)$/.test(file.type) || /\.(png|jpe?g)$/i.test(file.name)
+        if (!ok) {
+          message.error('Use a PNG or JPG image')
+          return false
+        }
+        setIdentityUploading(kind)
+        readFileData(file).then(data => api.setSiteImage(kind, file.name, data)).then(r => {
           setAssets(items => [r.asset, ...items.filter(item => item.id !== r.asset.id)])
-          settingsForm.setFieldValue(field, r.asset.url)
-          message.success(field === 'logo_url' ? 'Logo uploaded' : 'Favicon uploaded')
-        }).catch((e:any) => message.error(e.message))
+          settingsForm.setFieldValue(kind === 'logo' ? 'logo_url' : 'favicon_url', r.asset.url)
+          settingsForm.setFieldValue(kind === 'logo' ? 'logo_enabled' : 'favicon_enabled', true)
+          message.success(kind === 'logo' ? 'Logo updated' : 'Favicon updated')
+        }).catch((e:any) => message.error(e.message)).finally(() => setIdentityUploading(''))
         return false
       }
     }
+  }
+  function setIdentityFromURL(kind: IdentityKind) {
+    const sourceURL = identitySourceURL[kind].trim()
+    if (!sourceURL) {
+      message.error('Enter an image URL')
+      return
+    }
+    setIdentityUploading(kind)
+    api.setSiteImage(kind, '', '', sourceURL).then(r => {
+      setAssets(items => [r.asset, ...items.filter(item => item.id !== r.asset.id)])
+      settingsForm.setFieldValue(kind === 'logo' ? 'logo_url' : 'favicon_url', r.asset.url)
+      settingsForm.setFieldValue(kind === 'logo' ? 'logo_enabled' : 'favicon_enabled', true)
+      setIdentitySourceURL(values => ({ ...values, [kind]: '' }))
+      message.success(kind === 'logo' ? 'Logo updated from URL' : 'Favicon updated from URL')
+    }).catch((e:any) => message.error(e.message)).finally(() => setIdentityUploading(''))
   }
   const mediaUploadProps: UploadProps = {
     showUploadList: false,
@@ -303,6 +389,8 @@ function Root() {
       return false
     }
   }
+
+  const mdxEditorKey = [active?.slug || 'new', active?.updated_at || '', editorRev].join('-')
 
   return <ConfigProvider theme={cfg} getPopupContainer={trigger => trigger?.parentElement || document.body}><AntApp><Layout className="layout" style={adminVars}>
     <Layout.Sider className="sider" width={310} breakpoint="lg" collapsedWidth={0}>
@@ -350,23 +438,7 @@ function Root() {
             <Form.Item name="markdown" label="Body" className="mdField">
               {sourceMode
                 ? <Input.TextArea rows={22} className="sourceEditor" value={md} onChange={e => form.setFieldValue('markdown', e.target.value)} />
-                : <MDXEditor key={`${active?.slug || 'new'}-${active?.updated_at || ''}-${editorRev}`} className={adminDark ? 'tinyMdx dark-theme' : 'tinyMdx'} contentEditableClassName="tinyMdxContent" markdown={md} onChange={v => form.setFieldValue('markdown', v)} plugins={[
-                  headingsPlugin(),
-                  listsPlugin(),
-                  quotePlugin(),
-                  thematicBreakPlugin(),
-                  linkPlugin(),
-                  linkDialogPlugin(),
-                  imagePlugin({ imageUploadHandler: uploadImageForEditor, imageAutocompleteSuggestions: imageSuggestions.length ? imageSuggestions : ['/uploads/'] }),
-                  tablePlugin(),
-                  codeBlockPlugin({ defaultCodeBlockLanguage: 'text' }),
-                  codeMirrorPlugin({ codeBlockLanguages: { text: 'Plain text', markdown: 'Markdown', python: 'Python', py: 'Python', javascript: 'JavaScript', typescript: 'TypeScript', jsx: 'JSX', tsx: 'TSX', html: 'HTML', css: 'CSS', json: 'JSON', bash: 'Shell', sh: 'Shell', go: 'Go', sql: 'SQL', yaml: 'YAML', yml: 'YAML', mermaid: 'Mermaid diagram' } }),
-                  markdownShortcutPlugin(),
-                  toolbarPlugin({toolbarContents: () => <ConditionalContents options={[
-                    { when: editor => editor?.editorType === 'codeblock', contents: () => <ChangeCodeMirrorLanguage /> },
-                    { fallback: () => <><UndoRedo /><Separator /><BoldItalicUnderlineToggles /><CodeToggle /><ListsToggle /><BlockTypeSelect /><Separator /><CreateLink /><InsertImage /><Separator /><InsertTable /><InsertThematicBreak /><InsertCodeBlock /></> }
-                  ]} />})
-                ]} />}
+                : <React.Suspense fallback={<div className="mdxLoading">Loading editor...</div>}><MdxBodyEditor editorKey={mdxEditorKey} adminDark={adminDark} markdown={md} onChange={v => form.setFieldValue('markdown', v)} uploadImage={uploadImageForEditor} imageSuggestions={imageSuggestions} /></React.Suspense>}
             </Form.Item>
           </Form>
           <Modal title="Browse uploads" open={mediaOpen} onCancel={() => setMediaOpen(false)} footer={null} width={920} className="mediaModal">
@@ -391,7 +463,7 @@ function Root() {
             <Space className="topbar" align="start">
               <div>
                 <Typography.Title level={3}>Site settings</Typography.Title>
-                <Typography.Text type="secondary">Logo, favicon, top menu, footer, and public light/dark default.</Typography.Text>
+                <Typography.Text type="secondary">Logo, favicon, top menu, and public light/dark default.</Typography.Text>
               </div>
               <Button type="primary" htmlType="submit" loading={savingSettings}>Save site</Button>
             </Space>
@@ -399,18 +471,37 @@ function Root() {
               <Form.Item name="logo_enabled" label="Logo" valuePropName="checked"><Switch /></Form.Item>
               <Form.Item name="favicon_enabled" label="Favicon" valuePropName="checked"><Switch /></Form.Item>
               <Form.Item name="menu_enabled" label="Top menu" valuePropName="checked"><Switch /></Form.Item>
-              <Form.Item name="footer_enabled" label="Footer" valuePropName="checked"><Switch /></Form.Item>
               <Form.Item name="theme_toggle_enabled" label="Guest theme toggle" valuePropName="checked"><Switch /></Form.Item>
               <Form.Item name="icons_enabled" label="Font Awesome icons" valuePropName="checked"><Switch /></Form.Item>
               <Form.Item name="search_enabled" label="Search" valuePropName="checked"><Switch /></Form.Item>
             </Space>
             <Form.Item name="site_name" label="Site name" rules={[{required:true}]}><Input /></Form.Item>
-            <Space className="assetGrid" align="start">
-              <Form.Item name="logo_url" label="Logo URL"><Input placeholder="/uploads/..." /></Form.Item>
-              <Upload {...settingsUploadProps('logo_url')}><Button>Upload logo</Button></Upload>
-              <Form.Item name="favicon_url" label="Favicon URL"><Input placeholder="/uploads/..." /></Form.Item>
-              <Upload {...settingsUploadProps('favicon_url')}><Button>Upload favicon</Button></Upload>
-            </Space>
+            <div className="identityGrid">
+              <div className="identityPanel">
+                <div className="identityPreview logoIdentityPreview">{logoURL ? <img src={logoURL} alt="" /> : <span>Logo</span>}</div>
+                <Form.Item name="logo_url" label="Current logo URL"><Input placeholder="/uploads/... or https://..." /></Form.Item>
+                <Input.Group compact className="identitySource">
+                  <Input value={identitySourceURL.logo} onChange={e => setIdentitySourceURL(values => ({ ...values, logo: e.target.value }))} placeholder="PNG/JPG URL to optimize" />
+                  <Button onClick={() => setIdentityFromURL('logo')} loading={identityUploading === 'logo'}>Set from URL</Button>
+                </Input.Group>
+                <Space wrap>
+                  <Upload {...identityUploadProps('logo')}><Button loading={identityUploading === 'logo'}>Set logo from PNG/JPG</Button></Upload>
+                  <Button onClick={() => settingsForm.setFieldValue('logo_url', '')}>Clear</Button>
+                </Space>
+              </div>
+              <div className="identityPanel">
+                <div className="identityPreview faviconIdentityPreview">{faviconURL ? <img src={faviconURL} alt="" /> : <span>Icon</span>}</div>
+                <Form.Item name="favicon_url" label="Current favicon URL"><Input placeholder="/uploads/... or https://..." /></Form.Item>
+                <Input.Group compact className="identitySource">
+                  <Input value={identitySourceURL.favicon} onChange={e => setIdentitySourceURL(values => ({ ...values, favicon: e.target.value }))} placeholder="PNG/JPG URL to optimize" />
+                  <Button onClick={() => setIdentityFromURL('favicon')} loading={identityUploading === 'favicon'}>Set from URL</Button>
+                </Input.Group>
+                <Space wrap>
+                  <Upload {...identityUploadProps('favicon')}><Button loading={identityUploading === 'favicon'}>Set favicon from PNG/JPG</Button></Upload>
+                  <Button onClick={() => settingsForm.setFieldValue('favicon_url', '')}>Clear</Button>
+                </Space>
+              </div>
+            </div>
             <Form.Item name="default_theme" label="Public default theme"><Select onChange={value => setPublicTheme(value)} options={[{label:'Light', value:'light'}, {label:'Dark', value:'dark'}]} /></Form.Item>
             <Form.Item name="nav_layout" label="Public navigation layout"><Select options={[{label:'Top menu', value:'top'}, {label:'Side drawer', value:'side'}]} /></Form.Item>
             <Typography.Title level={4}>Top menu</Typography.Title>
@@ -426,8 +517,77 @@ function Root() {
               </Space>)}
               <Button onClick={() => add({id:newID(), parent_id:'', label:'', url:'/', external:false, enabled:true})}>Add menu item</Button>
             </>}</Form.List>
-            <Form.Item name="footer_markdown" label="Global footer Markdown" className="footerField"><Input.TextArea rows={6} placeholder="© 2026 Your Company. All rights reserved." /></Form.Item>
           </Form>
+        </Card> },
+        { key:'footer', label:'Footer', children:<Card className="editorCard">
+          <Space className="topbar" align="start">
+            <div>
+              <Typography.Title level={3}>Footer</Typography.Title>
+              <Typography.Text type="secondary">Global Markdown shown at the bottom of public pages.</Typography.Text>
+            </div>
+            <Button type="primary" loading={savingSettings} onClick={() => saveSettings({ footer_enabled: footerEnabled, footer_markdown: footerMarkdown })}>Save footer</Button>
+          </Space>
+          <Space className="switchGrid" wrap>
+            <label className="footerToggle">
+              <Typography.Text strong>Footer enabled</Typography.Text>
+              <Switch checked={footerEnabled} onChange={setFooterEnabled} />
+            </label>
+          </Space>
+          <Input.TextArea className="sourceEditor footerEditor" rows={12} value={footerMarkdown} onChange={e => setFooterMarkdown(e.target.value)} placeholder={defaultFooter(settingsForm.getFieldValue('site_name') || 'Your Company')} />
+          <Typography.Paragraph type="secondary" className="footerHint">
+            Markdown supports contact lines, address, internal links, external links, and social profiles.
+          </Typography.Paragraph>
+        </Card> },
+        { key:'import', label:'Import', children:<Card className="editorCard">
+          <Space className="topbar" align="start">
+            <div>
+              <Typography.Title level={3}>Import website</Typography.Title>
+              <Typography.Text type="secondary">Pull pages and menu items from WordPress REST, XML sitemaps, or same-site links.</Typography.Text>
+            </div>
+            <Space wrap>
+              <Button onClick={previewImportSite} loading={previewingImport}>Preview</Button>
+              <Button type="primary" onClick={runImportSite} loading={runningImport} disabled={!importPreview?.pages?.length}>Import</Button>
+            </Space>
+          </Space>
+          <Form layout="vertical" className="importForm">
+            <Form.Item label="Website URL" required>
+              <Input value={importURL} onChange={e => setImportURL(e.target.value)} placeholder="https://example.com/" />
+            </Form.Item>
+            <Space className="switchGrid" wrap>
+              <Form.Item label="Max pages">
+                <Input type="number" min={1} max={200} value={importMaxPages} onChange={e => setImportMaxPages(Math.max(1, Math.min(200, Number(e.target.value) || 50)))} />
+              </Form.Item>
+              <Form.Item label="WordPress posts" valuePropName="checked"><Switch checked={importIncludePosts} onChange={setImportIncludePosts} /></Form.Item>
+              <Form.Item label="Menu" valuePropName="checked"><Switch checked={importMenu} onChange={setImportMenu} /></Form.Item>
+              <Form.Item label="Publish" valuePropName="checked"><Switch checked={importPublish} onChange={setImportPublish} /></Form.Item>
+              <Form.Item label="Update existing" valuePropName="checked"><Switch checked={importUpdateExisting} onChange={setImportUpdateExisting} /></Form.Item>
+              <Form.Item label="Download images" valuePropName="checked"><Switch checked={importDownloadImages} onChange={setImportDownloadImages} /></Form.Item>
+            </Space>
+          </Form>
+          {importPreview && <div className="importPreview">
+            <Space wrap className="importSummary">
+              <Typography.Text strong>{importPreview.wordpress ? 'WordPress' : importPreview.source || 'Website'} detected</Typography.Text>
+              <Typography.Text type="secondary">{importPreview.pages.length} page(s)</Typography.Text>
+              <Typography.Text type="secondary">{importPreview.menu.length} menu item(s)</Typography.Text>
+              {importPreview.existing > 0 && <Typography.Text type="warning">{importPreview.existing} existing</Typography.Text>}
+              {importPreview.imported > 0 && <Typography.Text type="success">{importPreview.imported} imported</Typography.Text>}
+              {importPreview.skipped > 0 && <Typography.Text type="secondary">{importPreview.skipped} skipped</Typography.Text>}
+            </Space>
+            {importPreview.errors.length > 0 && <List className="importErrors" dataSource={importPreview.errors} renderItem={err => <List.Item><Typography.Text type="danger">{err}</Typography.Text></List.Item>} />}
+            <Typography.Title level={4}>Pages</Typography.Title>
+            <List className="importList" dataSource={importPreview.pages} renderItem={page => <List.Item>
+              <List.Item.Meta
+                title={<Space wrap><span>{page.title}</span>{page.exists && <Typography.Text type="warning">existing</Typography.Text>}</Space>}
+                description={`${page.path} · ${page.content_type} · ${page.source_url}`}
+              />
+            </List.Item>} />
+            {importPreview.menu.length > 0 && <>
+              <Typography.Title level={4}>Menu</Typography.Title>
+              <List className="importList" dataSource={importPreview.menu} renderItem={item => <List.Item>
+                <List.Item.Meta title={item.label} description={`${item.url}${item.parent_id ? ` · child of ${item.parent_id}` : ''}`} />
+              </List.Item>} />
+            </>}
+          </div>}
         </Card> },
         { key:'security', label:'Security', children:<Card className="editorCard">
           <Space className="topbar" align="start">

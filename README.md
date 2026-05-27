@@ -106,11 +106,23 @@ The packages install:
 - data/uploads: `/var/lib/uvoominicms`
 - systemd unit: `uvoominicms.service`
 
-The package creates a locked-down `uvoominicms` system user, enables the systemd service, and leaves the service stopped until the admin password is changed. After install:
+The package creates a locked-down `uvoominicms` system user, generates a strong `CMS_ADMIN_PASS` when the packaged default is still present, enables the systemd service, and starts it automatically. The generated password is printed during install and stored in:
+
+```text
+/etc/uvoominicms/uvoominicms.env
+```
+
+Show it with:
+
+```bash
+sudo grep ^CMS_ADMIN_PASS= /etc/uvoominicms/uvoominicms.env
+```
+
+On upgrade, the package preserves the existing config and restarts the service. To rotate the admin password later, edit `CMS_ADMIN_PASS` and restart:
 
 ```bash
 sudo editor /etc/uvoominicms/uvoominicms.env
-sudo systemctl start uvoominicms
+sudo systemctl restart uvoominicms
 ```
 
 ## Docker
@@ -143,20 +155,32 @@ UvooMiniCMS keeps the editing model intentionally small:
 
 The `home` admin slug is reserved for `/` and cannot be deleted.
 
+## Website Import
+
+The admin `Import` tab can create CMS pages from an existing website URL.
+
+- WordPress sites are imported through the public REST API when available.
+- XML sitemaps are discovered through `robots.txt` and common paths such as `/sitemap.xml` and `/wp-sitemap.xml`.
+- If no sitemap is available, the importer falls back to same-site links found on the homepage.
+- Imported HTML content is converted to Markdown and saved as normal CMS pages/posts.
+- Menu import prefers WordPress menu endpoints, then falls back to homepage navigation links.
+- Existing routes are skipped by default; enable `Update existing` to overwrite matching slugs or paths.
+
 ## Site Settings
 
 The admin `Site` tab manages simple global pieces shared by every public page:
 
-- Logo and favicon upload fields.
+- Logo and favicon tools that resize PNG/JPG uploads or PNG/JPG URLs and update the active site setting.
 - A nested top menu builder for internal paths such as `/about` and external URLs.
 - Public navigation layout selector: top menu or smooth side drawer.
-- A Markdown footer shown on every page.
 - Public default theme, with a visitor-side light/dark toggle saved in the browser.
-- Enable/disable switches for logo, favicon, menu, footer, and the visitor theme toggle.
+- Enable/disable switches for logo, favicon, menu, and the visitor theme toggle.
 - Optional Font Awesome loading for the icon shortcode.
 - Public search toggle with a menu search control and `/search?q=...` results page.
 
 The public menu collapses into a small hamburger menu on mobile.
+
+The admin `Footer` tab manages the global Markdown footer shown on public pages. The default footer uses the current year and site name, and can be replaced with contact details, address lines, policy links, or social profile links.
 
 Mermaid diagrams can be written as fenced code blocks:
 

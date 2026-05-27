@@ -95,6 +95,70 @@ body,
   gap: 12px;
 }
 
+.identityGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.identityPanel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  background: var(--admin-surface-2);
+}
+
+.identityPanel .ant-form-item {
+  margin-bottom: 0;
+}
+
+.identityPreview {
+  display: grid;
+  place-items: center;
+  min-height: 82px;
+  border: 1px dashed var(--admin-border);
+  border-radius: 8px;
+  background: var(--admin-surface);
+  color: var(--admin-muted);
+  overflow: hidden;
+}
+
+.identityPreview img {
+  display: block;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.identitySource {
+  display: flex !important;
+}
+
+.identitySource .ant-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.identitySource .ant-btn {
+  width: 118px;
+}
+
+.logoIdentityPreview img {
+  max-height: 68px;
+}
+
+.faviconIdentityPreview {
+  width: 96px;
+  min-height: 96px;
+}
+
+.faviconIdentityPreview img {
+  width: 64px;
+  height: 64px;
+}
+
 .switchGrid {
   margin-bottom: 12px;
 }
@@ -236,6 +300,16 @@ body,
 
 .mdField {
   margin-top: 16px;
+}
+
+.mdxLoading {
+  min-height: 540px;
+  display: grid;
+  place-items: center;
+  color: var(--admin-muted);
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: 14px;
 }
 
 .mdField .mdxeditor {
@@ -622,9 +696,60 @@ body,
   color: var(--admin-muted) !important;
 }
 
+.importForm {
+  margin-top: 18px;
+}
+
+.importForm input[type="number"] {
+  width: 120px;
+}
+
+.importPreview {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.importSummary,
+.importErrors,
+.importList {
+  padding: 14px;
+  background: var(--admin-surface-2);
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+}
+
+.importList .ant-list-item-meta-title,
+.importList .ant-list-item-meta-description {
+  color: var(--admin-text) !important;
+}
+
+.importList .ant-list-item-meta-description {
+  color: var(--admin-muted) !important;
+}
+
+.footerToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--admin-surface-2);
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+}
+
+.footerEditor {
+  margin-top: 16px;
+}
+
+.footerHint {
+  margin-top: 10px;
+}
+
 @media (max-width: 1100px) {
   .assetGrid,
   .aclRow,
+  .identityGrid,
   .menuRow,
   .routeGrid,
   .securityGrid {
