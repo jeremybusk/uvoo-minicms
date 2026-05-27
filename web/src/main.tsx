@@ -15,6 +15,7 @@ const palettes = {
 }
 
 type Palette = keyof typeof palettes | 'custom'
+type IdentityKind = 'logo' | 'favicon'
 
 function slugify(s:string) { return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') }
 function pathify(s:string) {
@@ -41,6 +42,14 @@ function isImage(url:string) {
 }
 function assetMarkdown(asset: Asset) {
   return isImage(asset.url) ? `![${asset.name}](${asset.url})` : `[${asset.name}](${asset.url})`
+}
+function readFileData(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
 }
 const emptyACL: ACLSettings = {
   admin_default: 'allow',
@@ -84,10 +93,14 @@ function Root() {
   const [importPreview, setImportPreview] = useState<ImportResult | null>(null)
   const [previewingImport, setPreviewingImport] = useState(false)
   const [runningImport, setRunningImport] = useState(false)
+  const [identityUploading, setIdentityUploading] = useState<IdentityKind | ''>('')
+  const [identitySourceURL, setIdentitySourceURL] = useState<Record<IdentityKind, string>>({ logo: '', favicon: '' })
   const [form] = Form.useForm()
   const [settingsForm] = Form.useForm<SiteSettings>()
   const md = Form.useWatch('markdown', form) ?? ''
   const menuItems = Form.useWatch('menu', settingsForm) || []
+  const logoURL = Form.useWatch('logo_url', settingsForm) || ''
+  const faviconURL = Form.useWatch('favicon_url', settingsForm) || ''
   const selectedPalette = palette === 'custom'
     ? { ...palettes.slate, colorPrimary: customPrimary }
     : palettes[palette]
@@ -303,12 +316,7 @@ function Root() {
   }, [adminVars])
 
   async function upload(file: File) {
-    const data = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(String(reader.result))
-      reader.onerror = () => reject(reader.error)
-      reader.readAsDataURL(file)
-    })
+    const data = await readFileData(file)
     return api.uploadFile(file.name, data)
   }
   async function uploadImageForEditor(file: File) {
@@ -335,19 +343,41 @@ function Root() {
       return false
     }
   }
-  function settingsUploadProps(field: 'logo_url' | 'favicon_url'): UploadProps {
+  function identityUploadProps(kind: IdentityKind): UploadProps {
     return {
       showUploadList: false,
-      accept: field === 'favicon_url' ? '.ico,.png,.jpg,.jpeg,.webp' : '.png,.jpg,.jpeg,.webp,.avif',
+      accept: '.png,.jpg,.jpeg',
       beforeUpload(file) {
-        upload(file).then(r => {
+        const ok = /^image\/(png|jpeg)$/.test(file.type) || /\.(png|jpe?g)$/i.test(file.name)
+        if (!ok) {
+          message.error('Use a PNG or JPG image')
+          return false
+        }
+        setIdentityUploading(kind)
+        readFileData(file).then(data => api.setSiteImage(kind, file.name, data)).then(r => {
           setAssets(items => [r.asset, ...items.filter(item => item.id !== r.asset.id)])
-          settingsForm.setFieldValue(field, r.asset.url)
-          message.success(field === 'logo_url' ? 'Logo uploaded' : 'Favicon uploaded')
-        }).catch((e:any) => message.error(e.message))
+          settingsForm.setFieldValue(kind === 'logo' ? 'logo_url' : 'favicon_url', r.asset.url)
+          settingsForm.setFieldValue(kind === 'logo' ? 'logo_enabled' : 'favicon_enabled', true)
+          message.success(kind === 'logo' ? 'Logo updated' : 'Favicon updated')
+        }).catch((e:any) => message.error(e.message)).finally(() => setIdentityUploading(''))
         return false
       }
     }
+  }
+  function setIdentityFromURL(kind: IdentityKind) {
+    const sourceURL = identitySourceURL[kind].trim()
+    if (!sourceURL) {
+      message.error('Enter an image URL')
+      return
+    }
+    setIdentityUploading(kind)
+    api.setSiteImage(kind, '', '', sourceURL).then(r => {
+      setAssets(items => [r.asset, ...items.filter(item => item.id !== r.asset.id)])
+      settingsForm.setFieldValue(kind === 'logo' ? 'logo_url' : 'favicon_url', r.asset.url)
+      settingsForm.setFieldValue(kind === 'logo' ? 'logo_enabled' : 'favicon_enabled', true)
+      setIdentitySourceURL(values => ({ ...values, [kind]: '' }))
+      message.success(kind === 'logo' ? 'Logo updated from URL' : 'Favicon updated from URL')
+    }).catch((e:any) => message.error(e.message)).finally(() => setIdentityUploading(''))
   }
   const mediaUploadProps: UploadProps = {
     showUploadList: false,
@@ -446,12 +476,32 @@ function Root() {
               <Form.Item name="search_enabled" label="Search" valuePropName="checked"><Switch /></Form.Item>
             </Space>
             <Form.Item name="site_name" label="Site name" rules={[{required:true}]}><Input /></Form.Item>
-            <Space className="assetGrid" align="start">
-              <Form.Item name="logo_url" label="Logo URL"><Input placeholder="/uploads/..." /></Form.Item>
-              <Upload {...settingsUploadProps('logo_url')}><Button>Upload logo</Button></Upload>
-              <Form.Item name="favicon_url" label="Favicon URL"><Input placeholder="/uploads/..." /></Form.Item>
-              <Upload {...settingsUploadProps('favicon_url')}><Button>Upload favicon</Button></Upload>
-            </Space>
+            <div className="identityGrid">
+              <div className="identityPanel">
+                <div className="identityPreview logoIdentityPreview">{logoURL ? <img src={logoURL} alt="" /> : <span>Logo</span>}</div>
+                <Form.Item name="logo_url" label="Current logo URL"><Input placeholder="/uploads/... or https://..." /></Form.Item>
+                <Input.Group compact className="identitySource">
+                  <Input value={identitySourceURL.logo} onChange={e => setIdentitySourceURL(values => ({ ...values, logo: e.target.value }))} placeholder="PNG/JPG URL to optimize" />
+                  <Button onClick={() => setIdentityFromURL('logo')} loading={identityUploading === 'logo'}>Set from URL</Button>
+                </Input.Group>
+                <Space wrap>
+                  <Upload {...identityUploadProps('logo')}><Button loading={identityUploading === 'logo'}>Set logo from PNG/JPG</Button></Upload>
+                  <Button onClick={() => settingsForm.setFieldValue('logo_url', '')}>Clear</Button>
+                </Space>
+              </div>
+              <div className="identityPanel">
+                <div className="identityPreview faviconIdentityPreview">{faviconURL ? <img src={faviconURL} alt="" /> : <span>Icon</span>}</div>
+                <Form.Item name="favicon_url" label="Current favicon URL"><Input placeholder="/uploads/... or https://..." /></Form.Item>
+                <Input.Group compact className="identitySource">
+                  <Input value={identitySourceURL.favicon} onChange={e => setIdentitySourceURL(values => ({ ...values, favicon: e.target.value }))} placeholder="PNG/JPG URL to optimize" />
+                  <Button onClick={() => setIdentityFromURL('favicon')} loading={identityUploading === 'favicon'}>Set from URL</Button>
+                </Input.Group>
+                <Space wrap>
+                  <Upload {...identityUploadProps('favicon')}><Button loading={identityUploading === 'favicon'}>Set favicon from PNG/JPG</Button></Upload>
+                  <Button onClick={() => settingsForm.setFieldValue('favicon_url', '')}>Clear</Button>
+                </Space>
+              </div>
+            </div>
             <Form.Item name="default_theme" label="Public default theme"><Select onChange={value => setPublicTheme(value)} options={[{label:'Light', value:'light'}, {label:'Dark', value:'dark'}]} /></Form.Item>
             <Form.Item name="nav_layout" label="Public navigation layout"><Select options={[{label:'Top menu', value:'top'}, {label:'Side drawer', value:'side'}]} /></Form.Item>
             <Typography.Title level={4}>Top menu</Typography.Title>

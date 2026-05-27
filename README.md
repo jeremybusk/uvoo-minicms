@@ -170,7 +170,7 @@ The admin `Import` tab can create CMS pages from an existing website URL.
 
 The admin `Site` tab manages simple global pieces shared by every public page:
 
-- Logo and favicon upload fields.
+- Logo and favicon tools that resize PNG/JPG uploads or PNG/JPG URLs and update the active site setting.
 - A nested top menu builder for internal paths such as `/about` and external URLs.
 - Public navigation layout selector: top menu or smooth side drawer.
 - Public default theme, with a visitor-side light/dark toggle saved in the browser.
