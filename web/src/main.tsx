@@ -25,6 +25,9 @@ function pathify(s:string) {
 function freshPage() {
   return { slug:'', path:'', title:'', meta_description:'', content_type:'page', tags:'', markdown:'# Untitled\n', published:false } as Page
 }
+function defaultFooter(siteName = 'UvooMiniCMS') {
+  return `© ${new Date().getUTCFullYear()} ${siteName}. All rights reserved.`
+}
 function newID() {
   return globalThis.crypto?.randomUUID?.() || `item-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
@@ -69,6 +72,8 @@ function Root() {
   const [publicPrimary, setPublicPrimary] = useState('#386bc0')
   const [publicSecondary, setPublicSecondary] = useState('#64748b')
   const [publicHeaderStyle, setPublicHeaderStyle] = useState<'neutral'|'accent-line'|'accent-bg'>('neutral')
+  const [footerEnabled, setFooterEnabled] = useState(true)
+  const [footerMarkdown, setFooterMarkdown] = useState(defaultFooter())
   const [importURL, setImportURL] = useState('')
   const [importMaxPages, setImportMaxPages] = useState(50)
   const [importIncludePosts, setImportIncludePosts] = useState(true)
@@ -131,6 +136,8 @@ function Root() {
     setPublicPrimary(r.settings.public_primary_color || '#386bc0')
     setPublicSecondary(r.settings.public_secondary_color || '#64748b')
     setPublicHeaderStyle(r.settings.public_header_style || 'neutral')
+    setFooterEnabled(r.settings.footer_enabled !== false)
+    setFooterMarkdown(r.settings.footer_markdown || defaultFooter(r.settings.site_name))
   }
   async function loadAssets() {
     setLoadingAssets(true)
@@ -189,6 +196,8 @@ function Root() {
       setPublicPrimary(r.settings.public_primary_color || '#386bc0')
       setPublicSecondary(r.settings.public_secondary_color || '#64748b')
       setPublicHeaderStyle(r.settings.public_header_style || 'neutral')
+      setFooterEnabled(r.settings.footer_enabled !== false)
+      setFooterMarkdown(r.settings.footer_markdown || defaultFooter(r.settings.site_name))
       setCustomSecondary(r.settings.admin_secondary_color || '#64748b')
       message.success('Site settings saved')
     } catch(e:any) {
@@ -424,7 +433,7 @@ function Root() {
             <Space className="topbar" align="start">
               <div>
                 <Typography.Title level={3}>Site settings</Typography.Title>
-                <Typography.Text type="secondary">Logo, favicon, top menu, footer, and public light/dark default.</Typography.Text>
+                <Typography.Text type="secondary">Logo, favicon, top menu, and public light/dark default.</Typography.Text>
               </div>
               <Button type="primary" htmlType="submit" loading={savingSettings}>Save site</Button>
             </Space>
@@ -432,7 +441,6 @@ function Root() {
               <Form.Item name="logo_enabled" label="Logo" valuePropName="checked"><Switch /></Form.Item>
               <Form.Item name="favicon_enabled" label="Favicon" valuePropName="checked"><Switch /></Form.Item>
               <Form.Item name="menu_enabled" label="Top menu" valuePropName="checked"><Switch /></Form.Item>
-              <Form.Item name="footer_enabled" label="Footer" valuePropName="checked"><Switch /></Form.Item>
               <Form.Item name="theme_toggle_enabled" label="Guest theme toggle" valuePropName="checked"><Switch /></Form.Item>
               <Form.Item name="icons_enabled" label="Font Awesome icons" valuePropName="checked"><Switch /></Form.Item>
               <Form.Item name="search_enabled" label="Search" valuePropName="checked"><Switch /></Form.Item>
@@ -459,8 +467,26 @@ function Root() {
               </Space>)}
               <Button onClick={() => add({id:newID(), parent_id:'', label:'', url:'/', external:false, enabled:true})}>Add menu item</Button>
             </>}</Form.List>
-            <Form.Item name="footer_markdown" label="Global footer Markdown" className="footerField"><Input.TextArea rows={6} placeholder="© 2026 Your Company. All rights reserved." /></Form.Item>
           </Form>
+        </Card> },
+        { key:'footer', label:'Footer', children:<Card className="editorCard">
+          <Space className="topbar" align="start">
+            <div>
+              <Typography.Title level={3}>Footer</Typography.Title>
+              <Typography.Text type="secondary">Global Markdown shown at the bottom of public pages.</Typography.Text>
+            </div>
+            <Button type="primary" loading={savingSettings} onClick={() => saveSettings({ footer_enabled: footerEnabled, footer_markdown: footerMarkdown })}>Save footer</Button>
+          </Space>
+          <Space className="switchGrid" wrap>
+            <label className="footerToggle">
+              <Typography.Text strong>Footer enabled</Typography.Text>
+              <Switch checked={footerEnabled} onChange={setFooterEnabled} />
+            </label>
+          </Space>
+          <Input.TextArea className="sourceEditor footerEditor" rows={12} value={footerMarkdown} onChange={e => setFooterMarkdown(e.target.value)} placeholder={defaultFooter(settingsForm.getFieldValue('site_name') || 'Your Company')} />
+          <Typography.Paragraph type="secondary" className="footerHint">
+            Markdown supports contact lines, address, internal links, external links, and social profiles.
+          </Typography.Paragraph>
         </Card> },
         { key:'import', label:'Import', children:<Card className="editorCard">
           <Space className="topbar" align="start">

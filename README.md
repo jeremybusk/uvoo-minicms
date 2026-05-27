@@ -173,13 +173,14 @@ The admin `Site` tab manages simple global pieces shared by every public page:
 - Logo and favicon upload fields.
 - A nested top menu builder for internal paths such as `/about` and external URLs.
 - Public navigation layout selector: top menu or smooth side drawer.
-- A Markdown footer shown on every page.
 - Public default theme, with a visitor-side light/dark toggle saved in the browser.
-- Enable/disable switches for logo, favicon, menu, footer, and the visitor theme toggle.
+- Enable/disable switches for logo, favicon, menu, and the visitor theme toggle.
 - Optional Font Awesome loading for the icon shortcode.
 - Public search toggle with a menu search control and `/search?q=...` results page.
 
 The public menu collapses into a small hamburger menu on mobile.
+
+The admin `Footer` tab manages the global Markdown footer shown on public pages. The default footer uses the current year and site name, and can be replaced with contact details, address lines, policy links, or social profile links.
 
 Mermaid diagrams can be written as fenced code blocks:
 
