@@ -40,6 +40,7 @@ type Options struct {
 	Publish        bool
 	UpdateExisting bool
 	DownloadImages bool
+	PreviewOnly    bool
 }
 
 type Result struct {
@@ -141,6 +142,8 @@ func (i Importer) Import(ctx context.Context, store *db.Store, uploadDir, siteNa
 		bySlug[page.Slug] = page
 		byPath[page.Path] = page
 	}
+	imageCache := map[string]string{}
+	imageFailures := map[string]bool{}
 	for idx := range result.Pages {
 		page := &result.Pages[idx]
 		saveSlug := page.Slug
@@ -162,7 +165,7 @@ func (i Importer) Import(ctx context.Context, store *db.Store, uploadDir, siteNa
 			saveSlug = current.Slug
 		}
 		if opts.DownloadImages {
-			markdown, imageErrors := i.localizeImages(ctx, store, uploadDir, page.Markdown)
+			markdown, imageErrors := i.localizeImages(ctx, store, uploadDir, page.Markdown, imageCache, imageFailures)
 			page.Markdown = markdown
 			result.Errors = append(result.Errors, imageErrors...)
 		}
@@ -213,7 +216,7 @@ func (i Importer) previewWordPress(ctx context.Context, base *url.URL, opts Opti
 		if collection.Kind == "post" {
 			endpoint = "posts"
 		}
-		items, err := i.fetchWPPosts(ctx, base, endpoint, opts.MaxPages-len(pages))
+		items, err := i.fetchWPPosts(ctx, base, endpoint, opts.MaxPages-len(pages), !opts.PreviewOnly)
 		if err != nil {
 			continue
 		}
@@ -237,10 +240,111 @@ func (i Importer) previewWordPress(ctx context.Context, base *url.URL, opts Opti
 	if len(result.Menu) == 0 && opts.ImportMenu {
 		result.Menu = i.fetchHomepageMenu(ctx, base)
 	}
+	if len(result.Menu) > 0 {
+		result.Pages = i.prioritizeMenuPages(ctx, base, result.Pages, result.Menu, opts.MaxPages, opts.Publish, opts.PreviewOnly)
+	}
 	return result, nil
 }
 
-func (i Importer) fetchWPPosts(ctx context.Context, base *url.URL, endpoint string, limit int) ([]wpPost, error) {
+type menuPageLink struct {
+	Path  string
+	Label string
+}
+
+func (i Importer) prioritizeMenuPages(ctx context.Context, base *url.URL, pages []Page, menu []db.NavItem, max int, publish, previewOnly bool) []Page {
+	if max <= 0 || len(menu) == 0 {
+		return pages
+	}
+	byPath := map[string]Page{}
+	for _, page := range pages {
+		if page.Path != "" {
+			byPath[page.Path] = page
+		}
+	}
+	menuLinks := append([]menuPageLink{{Path: "/", Label: "Home"}}, menuPageLinks(menu)...)
+	merged := make([]Page, 0, len(pages)+len(menuLinks))
+	added := map[string]bool{}
+	for _, link := range menuLinks {
+		if page, ok := byPath[link.Path]; ok {
+			merged = append(merged, page)
+			added[link.Path] = true
+			continue
+		}
+		raw := base.ResolveReference(&url.URL{Path: link.Path}).String()
+		if previewOnly {
+			title := firstNonEmpty(link.Label, titleFromPath(link.Path))
+			merged = append(merged, Page{
+				Slug:        slugFromPath(link.Path),
+				Path:        link.Path,
+				Title:       title,
+				ContentType: "page",
+				Markdown:    "# " + title + "\n",
+				SourceURL:   raw,
+				Published:   publish,
+			})
+			added[link.Path] = true
+			if len(merged) >= max {
+				return merged[:max]
+			}
+			continue
+		}
+		page, err := i.fetchHTMLPage(ctx, base, raw, publish)
+		if err != nil || page.Path == "" || added[page.Path] {
+			continue
+		}
+		merged = append(merged, page)
+		added[page.Path] = true
+		if len(merged) >= max {
+			return merged[:max]
+		}
+	}
+	for _, page := range pages {
+		if page.Path == "" || added[page.Path] {
+			continue
+		}
+		merged = append(merged, page)
+		added[page.Path] = true
+		if len(merged) >= max {
+			return merged[:max]
+		}
+	}
+	return merged
+}
+
+func menuPageLinks(menu []db.NavItem) []menuPageLink {
+	var out []menuPageLink
+	seen := map[string]bool{}
+	for _, item := range menu {
+		route := cleanMenuRoute(item.URL)
+		if route == "" || seen[route] {
+			continue
+		}
+		seen[route] = true
+		out = append(out, menuPageLink{Path: route, Label: item.Label})
+	}
+	return out
+}
+
+func cleanMenuRoute(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || strings.HasPrefix(raw, "//") || strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") || strings.HasPrefix(raw, "mailto:") || strings.HasPrefix(raw, "tel:") || strings.HasPrefix(raw, "#") {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	if u.Path == "" {
+		return ""
+	}
+	cleaned := path.Clean("/" + strings.Trim(u.EscapedPath(), "/"))
+	if cleaned == "/." {
+		return "/"
+	}
+	return cleaned
+}
+
+func (i Importer) fetchWPPosts(ctx context.Context, base *url.URL, endpoint string, limit int, includeContent bool) ([]wpPost, error) {
 	if limit <= 0 {
 		return nil, nil
 	}
@@ -250,7 +354,11 @@ func (i Importer) fetchWPPosts(ctx context.Context, base *url.URL, endpoint stri
 		q := u.Query()
 		q.Set("per_page", "100")
 		q.Set("page", fmt.Sprint(page))
-		q.Set("_fields", "id,slug,link,status,parent,menu_order,title,content,excerpt")
+		fields := "id,slug,link,status,parent,menu_order,title,excerpt"
+		if includeContent {
+			fields += ",content"
+		}
+		q.Set("_fields", fields)
 		u.RawQuery = q.Encode()
 		var items []wpPost
 		if err := i.getJSON(ctx, u.String(), &items); err != nil {
@@ -417,9 +525,18 @@ func (i Importer) readSitemap(ctx context.Context, sitemapURL string, base *url.
 			if err := decoder.DecodeElement(&index, &start); err != nil {
 				return nil, err
 			}
-			var urls []string
+			children := make([]string, 0, len(index.Sitemaps))
 			for _, child := range index.Sitemaps {
-				found, err := i.readSitemap(ctx, strings.TrimSpace(child.Loc), base, limit-len(urls))
+				if loc := strings.TrimSpace(child.Loc); loc != "" && !skipSitemapChild(loc) {
+					children = append(children, loc)
+				}
+			}
+			sort.SliceStable(children, func(a, b int) bool {
+				return sitemapChildRank(children[a]) < sitemapChildRank(children[b])
+			})
+			var urls []string
+			for _, child := range children {
+				found, err := i.readSitemap(ctx, child, base, limit-len(urls))
 				if err == nil {
 					urls = appendUnique(urls, found...)
 				}
@@ -452,6 +569,38 @@ func (i Importer) readSitemap(ctx context.Context, sitemapURL string, base *url.
 			return nil, fmt.Errorf("unsupported sitemap root: %s", start.Name.Local)
 		}
 	}
+}
+
+func sitemapChildRank(raw string) int {
+	lower := strings.ToLower(raw)
+	switch {
+	case strings.Contains(lower, "wp-sitemap-posts-page") || strings.Contains(lower, "page-sitemap"):
+		return 0
+	case strings.Contains(lower, "wp-sitemap-posts-post") || strings.Contains(lower, "post-sitemap"):
+		return 1
+	case strings.Contains(lower, "wp-sitemap-posts-"):
+		return 2
+	default:
+		return 3
+	}
+}
+
+func skipSitemapChild(raw string) bool {
+	lower := strings.ToLower(raw)
+	skip := []string{
+		"wp-sitemap-taxonomies-",
+		"wp-sitemap-users-",
+		"wp-sitemap-posts-wdt_headers",
+		"wp-sitemap-posts-wdt_footers",
+		"wp-sitemap-posts-elementor_library",
+		"wp-sitemap-posts-attachment",
+	}
+	for _, marker := range skip {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func (i Importer) fetchHTMLPage(ctx context.Context, base *url.URL, rawURL string, publish bool) (Page, error) {
@@ -511,9 +660,14 @@ func (i Importer) fetchHomepageMenu(ctx context.Context, base *url.URL) []db.Nav
 
 var markdownImageRe = regexp.MustCompile(`!\[([^\]]*)\]\((https?://[^)\s]+)\)`)
 
-func (i Importer) localizeImages(ctx context.Context, store *db.Store, uploadDir, markdown string) (string, []string) {
+func (i Importer) localizeImages(ctx context.Context, store *db.Store, uploadDir, markdown string, cache map[string]string, failures map[string]bool) (string, []string) {
 	var errors []string
-	cache := map[string]string{}
+	if cache == nil {
+		cache = map[string]string{}
+	}
+	if failures == nil {
+		failures = map[string]bool{}
+	}
 	out := markdownImageRe.ReplaceAllStringFunc(markdown, func(match string) string {
 		parts := markdownImageRe.FindStringSubmatch(match)
 		if len(parts) != 3 {
@@ -523,9 +677,13 @@ func (i Importer) localizeImages(ctx context.Context, store *db.Store, uploadDir
 		if cached, ok := cache[remote]; ok {
 			return fmt.Sprintf("![%s](%s)", parts[1], cached)
 		}
+		if failures[remote] {
+			return match
+		}
 		localURL, err := i.downloadImage(ctx, store, uploadDir, remote)
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("image %s: %v", remote, err))
+			failures[remote] = true
 			return match
 		}
 		cache[remote] = localURL

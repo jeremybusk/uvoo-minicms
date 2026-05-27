@@ -48,7 +48,7 @@ func main() {
 	if (cfg.TLSCertFile == "") != (cfg.TLSKeyFile == "") {
 		log.Fatal("both TLS cert and key must be provided")
 	}
-	srv := &http.Server{Addr: cfg.Addr, Handler: secureHeaders(mux), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 1 << 20}
+	srv := &http.Server{Addr: cfg.Addr, Handler: secureHeaders(mux), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 4 * time.Minute, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 1 << 20}
 	log.Printf("uvoominicms listening on %s db=%s uploads=%s tls=%t", cfg.Addr, cfg.DBPath, filepath.Clean(cfg.UploadDir), tlsEnabled)
 	if tlsEnabled {
 		log.Fatal(srv.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile))

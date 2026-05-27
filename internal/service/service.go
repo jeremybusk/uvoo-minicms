@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -163,7 +164,9 @@ func (s *Service) SaveACL(ctx context.Context, req *connect.Request[structpb.Str
 func (s *Service) ImportPreview(ctx context.Context, req *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	result, err := importer.Importer{Client: &http.Client{Timeout: 4 * time.Second}}.Preview(ctx, importOptions(fields(req)))
+	opts := importOptions(fields(req))
+	opts.PreviewOnly = true
+	result, err := importer.Importer{Client: &http.Client{Timeout: 4 * time.Second}}.Preview(ctx, opts)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, connect.NewError(connect.CodeDeadlineExceeded, errors.New("import preview timed out after 15 seconds; the source site did not respond quickly enough"))
@@ -176,6 +179,11 @@ func (s *Service) ImportSite(ctx context.Context, req *connect.Request[structpb.
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
 	opts := importOptions(fields(req))
+	if opts.DownloadImages {
+		if err := ensureWritableDir(s.UploadDir); err != nil {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("upload directory %q is not writable: %w; run with -uploads set to a writable directory or fix ownership/permissions", s.UploadDir, err))
+		}
+	}
 	result, err := importer.Importer{Client: &http.Client{Timeout: 10 * time.Second}}.Import(ctx, s.Store, s.UploadDir, s.SiteName, opts)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -243,6 +251,22 @@ func importOptions(m map[string]any) importer.Options {
 	}
 }
 
+func ensureWritableDir(dir string) error {
+	if err := os.MkdirAll(dir, 0750); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, ".write-test-*")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	if err := f.Close(); err != nil {
+		_ = os.Remove(name)
+		return err
+	}
+	return os.Remove(name)
+}
+
 func (s *Service) markImportExisting(ctx context.Context, result *importer.Result) error {
 	pages, err := s.Store.ListPages(ctx)
 	if err != nil {
@@ -275,7 +299,6 @@ func importResultMap(result importer.Result) map[string]any {
 			"meta_description": page.MetaDescription,
 			"content_type":     page.ContentType,
 			"tags":             page.Tags,
-			"markdown":         page.Markdown,
 			"source_url":       page.SourceURL,
 			"published":        page.Published,
 			"exists":           page.Exists,

@@ -145,6 +145,113 @@ func TestHomepageMenuPreservesDropdownParents(t *testing.T) {
 	}
 }
 
+func TestPreviewWordPressAddsMenuLinkedPagesFromHomepage(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/wp-json/", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, map[string]any{"name": "Example", "routes": map[string]any{}})
+	})
+	mux.HandleFunc("/wp-json/wp/v2/pages", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("page") != "1" {
+			writeJSON(t, w, []map[string]any{})
+			return
+		}
+		writeJSON(t, w, []map[string]any{{
+			"id":      1,
+			"slug":    "about",
+			"link":    serverURL(r) + "/about/",
+			"status":  "publish",
+			"title":   map[string]string{"rendered": "About"},
+			"content": map[string]string{"rendered": "<p>About from REST.</p>"},
+			"excerpt": map[string]string{"rendered": "About."},
+		}})
+	})
+	mux.HandleFunc("/wp-json/wp/v2/menus", func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		switch r.URL.Path {
+		case "/":
+			w.Write([]byte(`<header><nav><ul><li><a href="/menu-only/">Menu Only</a></li><li><a href="/about/">About</a></li></ul></nav></header>`))
+		case "/menu-only", "/menu-only/":
+			w.Write([]byte(`<main><h1>Menu Only</h1><p>This page is only discoverable from the menu.</p></main>`))
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	result, err := (Importer{Client: server.Client()}).Preview(context.Background(), Options{
+		URL:        server.URL,
+		MaxPages:   3,
+		ImportMenu: true,
+		Publish:    true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Pages) != 3 {
+		t.Fatalf("expected 3 pages, got %#v", result.Pages)
+	}
+	if result.Pages[0].Path != "/" {
+		t.Fatalf("expected homepage to be prioritized first, got %#v", result.Pages[0])
+	}
+	if result.Pages[1].Path != "/menu-only" || !strings.Contains(result.Pages[1].Markdown, "only discoverable from the menu") {
+		t.Fatalf("expected menu-only page to be fetched before filler pages, got %#v", result.Pages[1])
+	}
+	if result.Pages[2].Path != "/about" {
+		t.Fatalf("expected REST page to remain after prioritized pages, got %#v", result.Pages[2])
+	}
+}
+
+func TestReadSitemapPrioritizesWordPressPageAndPostSitemaps(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/wp-sitemap.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex>
+	<sitemap><loc>` + serverURL(r) + `/wp-sitemap-users-1.xml</loc></sitemap>
+	<sitemap><loc>` + serverURL(r) + `/wp-sitemap-posts-wdt_headers-1.xml</loc></sitemap>
+	<sitemap><loc>` + serverURL(r) + `/wp-sitemap-posts-post-1.xml</loc></sitemap>
+	<sitemap><loc>` + serverURL(r) + `/wp-sitemap-posts-page-1.xml</loc></sitemap>
+</sitemapindex>`))
+	})
+	mux.HandleFunc("/wp-sitemap-posts-page-1.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(`<urlset><url><loc>` + serverURL(r) + `/company/</loc></url></urlset>`))
+	})
+	mux.HandleFunc("/wp-sitemap-posts-post-1.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(`<urlset><url><loc>` + serverURL(r) + `/blog/</loc></url></urlset>`))
+	})
+	mux.HandleFunc("/wp-sitemap-users-1.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(`<urlset><url><loc>` + serverURL(r) + `/author/admin/</loc></url></urlset>`))
+	})
+	mux.HandleFunc("/wp-sitemap-posts-wdt_headers-1.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(`<urlset><url><loc>` + serverURL(r) + `/header/global/</loc></url></urlset>`))
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	base := mustURL(t, server.URL)
+
+	urls, err := (Importer{Client: server.Client()}).readSitemap(context.Background(), server.URL+"/wp-sitemap.xml", base, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{server.URL + "/company/", server.URL + "/blog/"}
+	if len(urls) != len(want) {
+		t.Fatalf("expected %d URLs, got %#v", len(want), urls)
+	}
+	for idx := range want {
+		if urls[idx] != want[idx] {
+			t.Fatalf("unexpected URL order: got %#v want %#v", urls, want)
+		}
+	}
+}
+
 func TestImportDownloadsImagesToUploads(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
