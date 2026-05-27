@@ -75,6 +75,7 @@ function Root() {
   const [importMenu, setImportMenu] = useState(true)
   const [importPublish, setImportPublish] = useState(true)
   const [importUpdateExisting, setImportUpdateExisting] = useState(false)
+  const [importDownloadImages, setImportDownloadImages] = useState(true)
   const [importPreview, setImportPreview] = useState<ImportResult | null>(null)
   const [previewingImport, setPreviewingImport] = useState(false)
   const [runningImport, setRunningImport] = useState(false)
@@ -249,7 +250,8 @@ function Root() {
       include_posts: importIncludePosts,
       import_menu: importMenu,
       publish: importPublish,
-      update_existing: importUpdateExisting
+      update_existing: importUpdateExisting,
+      download_images: importDownloadImages
     }
   }
   async function previewImportSite() {
@@ -483,6 +485,7 @@ function Root() {
               <Form.Item label="Menu" valuePropName="checked"><Switch checked={importMenu} onChange={setImportMenu} /></Form.Item>
               <Form.Item label="Publish" valuePropName="checked"><Switch checked={importPublish} onChange={setImportPublish} /></Form.Item>
               <Form.Item label="Update existing" valuePropName="checked"><Switch checked={importUpdateExisting} onChange={setImportUpdateExisting} /></Form.Item>
+              <Form.Item label="Download images" valuePropName="checked"><Switch checked={importDownloadImages} onChange={setImportDownloadImages} /></Form.Item>
             </Space>
           </Form>
           {importPreview && <div className="importPreview">

@@ -5,8 +5,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
+	"strings"
 	"testing"
 	"time"
+
+	"uvoominicms/internal/db"
 )
 
 func TestPreviewWordPressImportsPagesPostsAndMenu(t *testing.T) {
@@ -108,6 +113,109 @@ func TestPreviewHonorsContextDeadline(t *testing.T) {
 	}
 }
 
+func TestHomepageMenuPreservesDropdownParents(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<nav><ul>
+			<li><div><a href="/solutions-overview">Solutions</a></div><nav><a href="/fiber">Fiber</a><a href="/cloud">Cloud</a></nav></li>
+			<li><div>Resources</div><nav><a href="https://portal.example.com/">Portal</a><a href="/blog">Blog</a></nav></li>
+			<li><a href="/contact">Contact</a></li>
+		</ul></nav>`))
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	base := mustURL(t, server.URL)
+
+	menu := (Importer{Client: server.Client()}).fetchHomepageMenu(context.Background(), base)
+	if len(menu) != 7 {
+		t.Fatalf("expected 7 menu entries, got %#v", menu)
+	}
+	if menu[0].Label != "Solutions" || menu[0].ParentID != "" {
+		t.Fatalf("unexpected first parent: %#v", menu[0])
+	}
+	if menu[1].Label != "Fiber" || menu[1].ParentID != menu[0].ID {
+		t.Fatalf("expected Fiber under Solutions, got %#v", menu[1])
+	}
+	if menu[3].Label != "Resources" || menu[3].URL != "/blog" {
+		t.Fatalf("expected Resources parent using first child URL, got %#v", menu[3])
+	}
+	if menu[4].ParentID != menu[3].ID || !menu[4].External {
+		t.Fatalf("expected external Portal child, got %#v", menu[4])
+	}
+}
+
+func TestImportDownloadsImagesToUploads(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<main><h1>Home</h1><p>Welcome.</p><img src="/hero.png" alt="Hero image"><img src="/arrow.svg" alt=""></main>`))
+	})
+	mux.HandleFunc("/hero.png", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write([]byte("png bytes"))
+	})
+	mux.HandleFunc("/robots.txt", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	mux.HandleFunc("/sitemap.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	mux.HandleFunc("/wp-sitemap.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	mux.HandleFunc("/sitemap_index.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	mux.HandleFunc("/page-sitemap.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	mux.HandleFunc("/post-sitemap.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	dbPath := t.TempDir() + "/cms.db"
+	store, err := db.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.DB.Close()
+	uploads := t.TempDir()
+
+	result, err := (Importer{Client: server.Client()}).Import(context.Background(), store, uploads, "Demo", Options{
+		URL:            server.URL,
+		MaxPages:       1,
+		Publish:        true,
+		UpdateExisting: true,
+		DownloadImages: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Imported != 1 {
+		t.Fatalf("expected 1 imported page, got %#v", result)
+	}
+	page, err := store.GetPage(context.Background(), "home")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(page.Markdown, "![Hero image](/uploads/") {
+		t.Fatalf("expected localized image, got markdown:\n%s", page.Markdown)
+	}
+	if strings.Contains(page.Markdown, "arrow.svg") {
+		t.Fatalf("decorative svg should be skipped, got markdown:\n%s", page.Markdown)
+	}
+	entries, err := os.ReadDir(uploads)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("expected downloaded image under uploads")
+	}
+}
+
 func writeJSON(t *testing.T, w http.ResponseWriter, value any) {
 	t.Helper()
 	w.Header().Set("Content-Type", "application/json")
@@ -118,4 +226,13 @@ func writeJSON(t *testing.T, w http.ResponseWriter, value any) {
 
 func serverURL(r *http.Request) string {
 	return "http://" + r.Host
+}
+
+func mustURL(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u
 }

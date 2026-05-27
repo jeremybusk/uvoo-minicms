@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha1"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -12,7 +13,9 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -36,6 +39,7 @@ type Options struct {
 	ImportMenu     bool
 	Publish        bool
 	UpdateExisting bool
+	DownloadImages bool
 }
 
 type Result struct {
@@ -122,7 +126,7 @@ func (i Importer) Preview(ctx context.Context, opts Options) (Result, error) {
 	return fallback, nil
 }
 
-func (i Importer) Import(ctx context.Context, store *db.Store, siteName string, opts Options) (Result, error) {
+func (i Importer) Import(ctx context.Context, store *db.Store, uploadDir, siteName string, opts Options) (Result, error) {
 	result, err := i.Preview(ctx, opts)
 	if err != nil {
 		return result, err
@@ -156,6 +160,11 @@ func (i Importer) Import(ctx context.Context, store *db.Store, siteName string, 
 				continue
 			}
 			saveSlug = current.Slug
+		}
+		if opts.DownloadImages {
+			markdown, imageErrors := i.localizeImages(ctx, store, uploadDir, page.Markdown)
+			page.Markdown = markdown
+			result.Errors = append(result.Errors, imageErrors...)
 		}
 		_, err := store.SavePage(ctx, db.Page{
 			Slug:            saveSlug,
@@ -490,34 +499,74 @@ func (i Importer) fetchHomepageMenu(ctx context.Context, base *url.URL) []db.Nav
 	if root == nil {
 		return nil
 	}
-	var out []db.NavItem
-	seen := map[string]bool{}
-	var walk func(*html.Node)
-	walk = func(n *html.Node) {
-		if n.Type == html.ElementNode && n.Data == "a" {
-			label := strings.TrimSpace(nodeText(n))
-			href := attr(n, "href")
-			link := internalOrExternalURL(base, href)
-			if label != "" && link != "" && !seen[link] {
-				seen[link] = true
-				out = append(out, db.NavItem{
-					ID:       fmt.Sprintf("menu-%d", len(out)+1),
-					Label:    label,
-					URL:      link,
-					External: strings.HasPrefix(link, "http://") || strings.HasPrefix(link, "https://"),
-					Enabled:  true,
-				})
-			}
-		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			walk(c)
-		}
+	out := buildMenuFromNav(root, base)
+	if len(out) == 0 {
+		out = buildFlatMenu(root, base)
 	}
-	walk(root)
 	if len(out) > 25 {
 		out = out[:25]
 	}
 	return out
+}
+
+var markdownImageRe = regexp.MustCompile(`!\[([^\]]*)\]\((https?://[^)\s]+)\)`)
+
+func (i Importer) localizeImages(ctx context.Context, store *db.Store, uploadDir, markdown string) (string, []string) {
+	var errors []string
+	cache := map[string]string{}
+	out := markdownImageRe.ReplaceAllStringFunc(markdown, func(match string) string {
+		parts := markdownImageRe.FindStringSubmatch(match)
+		if len(parts) != 3 {
+			return match
+		}
+		remote := parts[2]
+		if cached, ok := cache[remote]; ok {
+			return fmt.Sprintf("![%s](%s)", parts[1], cached)
+		}
+		localURL, err := i.downloadImage(ctx, store, uploadDir, remote)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("image %s: %v", remote, err))
+			return match
+		}
+		cache[remote] = localURL
+		return fmt.Sprintf("![%s](%s)", parts[1], localURL)
+	})
+	return out, errors
+}
+
+func (i Importer) downloadImage(ctx context.Context, store *db.Store, uploadDir, remote string) (string, error) {
+	ext := imageExt(remote, "")
+	if ext == "" {
+		return "", errors.New("unsupported image type")
+	}
+	body, contentType, err := i.getBytes(ctx, remote)
+	if err != nil {
+		return "", err
+	}
+	if ext = imageExt(remote, contentType); ext == "" {
+		return "", fmt.Errorf("unsupported content type %s", contentType)
+	}
+	if len(body) == 0 {
+		return "", errors.New("empty image")
+	}
+	if len(body) > 8<<20 {
+		return "", errors.New("image too large")
+	}
+	day := time.Now().UTC().Format("2006/01/02")
+	dir := filepath.Join(uploadDir, day)
+	if err := os.MkdirAll(dir, 0750); err != nil {
+		return "", err
+	}
+	name := importedImageName(remote, ext, body)
+	filePath := filepath.Join(dir, name)
+	if err := os.WriteFile(filePath, body, 0640); err != nil {
+		return "", err
+	}
+	url := "/uploads/" + day + "/" + name
+	if _, err := store.InsertAsset(ctx, name, filePath, url, int64(len(body))); err != nil {
+		return "", err
+	}
+	return url, nil
 }
 
 func (i Importer) discoverHomepageLinks(ctx context.Context, base *url.URL, limit int) []string {
@@ -548,6 +597,215 @@ func (i Importer) discoverHomepageLinks(ctx context.Context, base *url.URL, limi
 	}
 	walk(doc)
 	return out
+}
+
+func buildMenuFromNav(root *html.Node, base *url.URL) []db.NavItem {
+	var out []db.NavItem
+	seen := map[string]bool{}
+	for c := root.FirstChild; c != nil; c = c.NextSibling {
+		buildMenuItems(c, base, "", &out, seen)
+	}
+	return out
+}
+
+func buildMenuItems(n *html.Node, base *url.URL, parentID string, out *[]db.NavItem, seen map[string]bool) {
+	if shouldSkipMenuNode(n) {
+		return
+	}
+	if n.Type == html.ElementNode {
+		switch n.Data {
+		case "li":
+			parent := firstDirectLink(n, base)
+			childRoot := firstChildNode(n, "ul", "nav")
+			if parent.Label == "" && childRoot != nil {
+				parent.Label = menuLabelFromNode(n)
+				parent.URL = firstDescendantInternalLink(childRoot, base)
+				if parent.URL == "" {
+					parent.URL = firstDescendantLink(childRoot, base)
+				}
+			}
+			if parent.Label != "" && parent.URL != "" && !seen[parent.ParentID+"|"+parent.Label+"|"+parent.URL] {
+				parent.ID = fmt.Sprintf("menu-%d", len(*out)+1)
+				parent.ParentID = parentID
+				parent.Enabled = true
+				parent.External = strings.HasPrefix(parent.URL, "http://") || strings.HasPrefix(parent.URL, "https://")
+				*out = append(*out, parent)
+				seen[parent.ParentID+"|"+parent.Label+"|"+parent.URL] = true
+				if childRoot != nil {
+					for c := childRoot.FirstChild; c != nil; c = c.NextSibling {
+						buildMenuItems(c, base, parent.ID, out, seen)
+					}
+					return
+				}
+			}
+		case "a":
+			label := strings.TrimSpace(nodeText(n))
+			link := internalOrExternalURL(base, attr(n, "href"))
+			key := parentID + "|" + label + "|" + link
+			if label != "" && link != "" && !seen[key] {
+				seen[key] = true
+				*out = append(*out, db.NavItem{
+					ID:       fmt.Sprintf("menu-%d", len(*out)+1),
+					ParentID: parentID,
+					Label:    label,
+					URL:      link,
+					External: strings.HasPrefix(link, "http://") || strings.HasPrefix(link, "https://"),
+					Enabled:  true,
+				})
+			}
+			return
+		case "nav":
+			if parentID != "" {
+				for c := n.FirstChild; c != nil; c = c.NextSibling {
+					buildMenuItems(c, base, parentID, out, seen)
+				}
+				return
+			}
+		}
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		buildMenuItems(c, base, parentID, out, seen)
+	}
+}
+
+func firstDirectLink(n *html.Node, base *url.URL) db.NavItem {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if shouldSkipMenuNode(c) {
+			continue
+		}
+		if c.Type == html.ElementNode && c.Data == "a" {
+			label := strings.TrimSpace(nodeText(c))
+			link := internalOrExternalURL(base, attr(c, "href"))
+			if label != "" && link != "" {
+				return db.NavItem{Label: label, URL: link}
+			}
+		}
+		if c.Type == html.ElementNode && c.Data != "ul" && c.Data != "nav" {
+			if item := firstDirectLink(c, base); item.Label != "" {
+				return item
+			}
+		}
+	}
+	return db.NavItem{}
+}
+
+func firstChildNode(n *html.Node, names ...string) *html.Node {
+	nameSet := map[string]bool{}
+	for _, name := range names {
+		nameSet[name] = true
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if shouldSkipMenuNode(c) {
+			continue
+		}
+		if c.Type == html.ElementNode && nameSet[c.Data] {
+			return c
+		}
+		if c.Type == html.ElementNode {
+			if found := firstChildNode(c, names...); found != nil {
+				return found
+			}
+		}
+	}
+	return nil
+}
+
+func firstDescendantInternalLink(n *html.Node, base *url.URL) string {
+	link := firstDescendantLink(n, base)
+	if link != "" && !strings.HasPrefix(link, "http://") && !strings.HasPrefix(link, "https://") && !strings.HasPrefix(link, "mailto:") && !strings.HasPrefix(link, "tel:") {
+		return link
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if found := firstDescendantInternalLink(c, base); found != "" {
+			return found
+		}
+	}
+	return ""
+}
+
+func firstDescendantLink(n *html.Node, base *url.URL) string {
+	if shouldSkipMenuNode(n) {
+		return ""
+	}
+	if n.Type == html.ElementNode && n.Data == "a" {
+		if link := internalOrExternalURL(base, attr(n, "href")); link != "" {
+			return link
+		}
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if link := firstDescendantLink(c, base); link != "" {
+			return link
+		}
+	}
+	return ""
+}
+
+func menuLabelFromNode(n *html.Node) string {
+	var labels []string
+	var walk func(*html.Node)
+	walk = func(node *html.Node) {
+		if shouldSkipMenuNode(node) {
+			return
+		}
+		if node.Type == html.ElementNode && (node.Data == "ul" || node.Data == "nav") {
+			return
+		}
+		if node.Type == html.TextNode {
+			if text := strings.TrimSpace(node.Data); text != "" {
+				labels = append(labels, text)
+			}
+		}
+		for c := node.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(n)
+	return truncate(strings.Join(labels, " "), 60)
+}
+
+func buildFlatMenu(root *html.Node, base *url.URL) []db.NavItem {
+	var out []db.NavItem
+	seen := map[string]bool{}
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if shouldSkipMenuNode(n) {
+			return
+		}
+		if n.Type == html.ElementNode && n.Data == "a" {
+			label := strings.TrimSpace(nodeText(n))
+			href := attr(n, "href")
+			link := internalOrExternalURL(base, href)
+			if label != "" && link != "" && !seen[link] {
+				seen[link] = true
+				out = append(out, db.NavItem{
+					ID:       fmt.Sprintf("menu-%d", len(out)+1),
+					Label:    label,
+					URL:      link,
+					External: strings.HasPrefix(link, "http://") || strings.HasPrefix(link, "https://"),
+					Enabled:  true,
+				})
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(root)
+	return out
+}
+
+func shouldSkipMenuNode(n *html.Node) bool {
+	if n == nil || n.Type != html.ElementNode {
+		return false
+	}
+	className := strings.ToLower(attr(n, "class"))
+	skip := []string{"show-in-tab", "tab-none", "menu-button", "w-nav-button"}
+	for _, marker := range skip {
+		if strings.Contains(className, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func (i Importer) getJSON(ctx context.Context, rawURL string, target any) error {
@@ -617,6 +875,46 @@ func normalizeOptions(opts Options) Options {
 		opts.MaxPages = defaultMaxPages
 	}
 	return opts
+}
+
+func imageExt(rawURL, contentType string) string {
+	if ct, _, _ := mime.ParseMediaType(contentType); strings.HasPrefix(ct, "image/") {
+		switch ct {
+		case "image/jpeg":
+			return ".jpg"
+		case "image/png":
+			return ".png"
+		case "image/gif":
+			return ".gif"
+		case "image/webp":
+			return ".webp"
+		case "image/avif":
+			return ".avif"
+		case "image/x-icon", "image/vnd.microsoft.icon":
+			return ".ico"
+		}
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	switch strings.ToLower(path.Ext(u.Path)) {
+	case ".avif", ".gif", ".ico", ".jpeg", ".jpg", ".png", ".webp":
+		return strings.ToLower(path.Ext(u.Path))
+	default:
+		return ""
+	}
+}
+
+func importedImageName(rawURL, ext string, data []byte) string {
+	u, _ := url.Parse(rawURL)
+	base := strings.TrimSuffix(path.Base(u.Path), path.Ext(u.Path))
+	base = cleanSlug(base)
+	if base == "" || base == "." {
+		base = "image"
+	}
+	sum := sha1.Sum(data)
+	return fmt.Sprintf("%s-%x%s", base, sum[:5], ext)
 }
 
 func normalizeBase(raw string) (*url.URL, error) {

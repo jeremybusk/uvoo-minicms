@@ -176,7 +176,7 @@ func (s *Service) ImportSite(ctx context.Context, req *connect.Request[structpb.
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
 	opts := importOptions(fields(req))
-	result, err := importer.Importer{Client: &http.Client{Timeout: 10 * time.Second}}.Import(ctx, s.Store, s.SiteName, opts)
+	result, err := importer.Importer{Client: &http.Client{Timeout: 10 * time.Second}}.Import(ctx, s.Store, s.UploadDir, s.SiteName, opts)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, connect.NewError(connect.CodeDeadlineExceeded, errors.New("import timed out after 3 minutes; try a smaller max page count or check the source site"))
@@ -239,6 +239,7 @@ func importOptions(m map[string]any) importer.Options {
 		ImportMenu:     boolean(m, "import_menu"),
 		Publish:        boolean(m, "publish"),
 		UpdateExisting: boolean(m, "update_existing"),
+		DownloadImages: boolean(m, "download_images"),
 	}
 }
 

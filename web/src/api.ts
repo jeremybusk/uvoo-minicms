@@ -65,6 +65,7 @@ export type ImportOptions = {
   import_menu:boolean
   publish:boolean
   update_existing:boolean
+  download_images:boolean
 }
 export type ImportResult = {
   source:string
@@ -80,9 +81,11 @@ export type ImportResult = {
   preview_limit:number
 }
 
-const base = '/cms.v1.CMSService/'
+const baseURL = new URL('/cms.v1.CMSService/', window.location.href)
+baseURL.username = ''
+baseURL.password = ''
 async function rpc<T>(name: string, body: Record<string, unknown> = {}): Promise<T> {
-  const r = await fetch(base + name, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const r = await fetch(new URL(name, baseURL).toString(), { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   if (!r.ok) throw new Error(await r.text())
   return r.json()
 }

@@ -56,8 +56,11 @@ func renderNode(b *strings.Builder, n *html.Node, base *url.URL, depth int) {
 		renderChildren(b, n, base, depth)
 		return
 	}
+	if shouldSkipElement(n) {
+		return
+	}
 	switch n.Data {
-	case "script", "style", "noscript", "svg", "form":
+	case "script", "style", "noscript", "svg", "form", "nav", "header", "footer":
 		return
 	case "h1", "h2", "h3", "h4", "h5", "h6":
 		level := int(n.Data[1] - '0')
@@ -66,7 +69,7 @@ func renderNode(b *strings.Builder, n *html.Node, base *url.URL, depth int) {
 		b.WriteByte(' ')
 		b.WriteString(strings.TrimSpace(nodeText(n)))
 		blankLine(b)
-	case "p", "div", "section", "article", "header", "footer", "main":
+	case "p", "div", "section", "article", "main":
 		blankLine(b)
 		renderChildren(b, n, base, depth)
 		blankLine(b)
@@ -144,19 +147,21 @@ func renderNode(b *strings.Builder, n *html.Node, base *url.URL, depth int) {
 		b.WriteString("[")
 		b.WriteString(label)
 		b.WriteString("](")
-		b.WriteString(href)
+		b.WriteString(markdownURL(href))
 		b.WriteString(")")
 	case "img":
 		src := absoluteURL(base, attr(n, "src"))
-		if src == "" {
+		if src == "" || isDecorativeImage(n, src) {
 			return
 		}
-		alt := strings.TrimSpace(attr(n, "alt"))
+		alt := firstNonEmpty(attr(n, "alt"), attr(n, "title"), titleFromPath(src))
+		blankLine(b)
 		b.WriteString("![")
 		b.WriteString(alt)
 		b.WriteString("](")
-		b.WriteString(src)
+		b.WriteString(markdownURL(src))
 		b.WriteString(")")
+		blankLine(b)
 	default:
 		renderChildren(b, n, base, depth)
 	}
@@ -306,6 +311,56 @@ func attr(n *html.Node, key string) string {
 		}
 	}
 	return ""
+}
+
+func shouldSkipElement(n *html.Node) bool {
+	if n.Type != html.ElementNode {
+		return false
+	}
+	className := strings.ToLower(attr(n, "class"))
+	id := strings.ToLower(attr(n, "id"))
+	skipClasses := []string{
+		"header-wrapper",
+		"footer-body-wrapper",
+		"nav-menu",
+		"navbar",
+		"menu-button",
+		"tab-none",
+		"show-in-tab",
+		"w-nav",
+		"w-form",
+		"form-wrapper",
+		"w-embed",
+		"w-script",
+		"elfsight",
+	}
+	for _, marker := range skipClasses {
+		if strings.Contains(className, marker) || strings.Contains(id, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func isDecorativeImage(n *html.Node, src string) bool {
+	alt := strings.TrimSpace(attr(n, "alt"))
+	className := strings.ToLower(attr(n, "class"))
+	lowerSrc := strings.ToLower(src)
+	if strings.HasSuffix(lowerSrc, ".svg") && alt == "" {
+		return true
+	}
+	decorativeWords := []string{"arrow", "chevron", "caret", "icon", "spinner", "vector"}
+	for _, word := range decorativeWords {
+		if strings.Contains(lowerSrc, word) || strings.Contains(className, word) {
+			return true
+		}
+	}
+	return false
+}
+
+func markdownURL(raw string) string {
+	replacer := strings.NewReplacer("(", "%28", ")", "%29", " ", "%20")
+	return replacer.Replace(raw)
 }
 
 func max(a, b int) int {
