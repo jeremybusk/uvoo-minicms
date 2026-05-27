@@ -11,17 +11,19 @@ import (
 const CMSServiceName = "cms.v1.CMSService"
 
 const (
-	CMSServiceHealthProcedure       = "/cms.v1.CMSService/Health"
-	CMSServiceListPagesProcedure    = "/cms.v1.CMSService/ListPages"
-	CMSServiceGetPageProcedure      = "/cms.v1.CMSService/GetPage"
-	CMSServiceSavePageProcedure     = "/cms.v1.CMSService/SavePage"
-	CMSServiceDeletePageProcedure   = "/cms.v1.CMSService/DeletePage"
-	CMSServiceGetSettingsProcedure  = "/cms.v1.CMSService/GetSettings"
-	CMSServiceSaveSettingsProcedure = "/cms.v1.CMSService/SaveSettings"
-	CMSServiceListAssetsProcedure   = "/cms.v1.CMSService/ListAssets"
-	CMSServiceUploadFileProcedure   = "/cms.v1.CMSService/UploadFile"
-	CMSServiceGetACLProcedure       = "/cms.v1.CMSService/GetACL"
-	CMSServiceSaveACLProcedure      = "/cms.v1.CMSService/SaveACL"
+	CMSServiceHealthProcedure        = "/cms.v1.CMSService/Health"
+	CMSServiceListPagesProcedure     = "/cms.v1.CMSService/ListPages"
+	CMSServiceGetPageProcedure       = "/cms.v1.CMSService/GetPage"
+	CMSServiceSavePageProcedure      = "/cms.v1.CMSService/SavePage"
+	CMSServiceDeletePageProcedure    = "/cms.v1.CMSService/DeletePage"
+	CMSServiceGetSettingsProcedure   = "/cms.v1.CMSService/GetSettings"
+	CMSServiceSaveSettingsProcedure  = "/cms.v1.CMSService/SaveSettings"
+	CMSServiceListAssetsProcedure    = "/cms.v1.CMSService/ListAssets"
+	CMSServiceUploadFileProcedure    = "/cms.v1.CMSService/UploadFile"
+	CMSServiceGetACLProcedure        = "/cms.v1.CMSService/GetACL"
+	CMSServiceSaveACLProcedure       = "/cms.v1.CMSService/SaveACL"
+	CMSServiceImportPreviewProcedure = "/cms.v1.CMSService/ImportPreview"
+	CMSServiceImportSiteProcedure    = "/cms.v1.CMSService/ImportSite"
 )
 
 type CMSServiceHandler interface {
@@ -36,6 +38,8 @@ type CMSServiceHandler interface {
 	UploadFile(context.Context, *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error)
 	GetACL(context.Context, *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error)
 	SaveACL(context.Context, *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error)
+	ImportPreview(context.Context, *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error)
+	ImportSite(context.Context, *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error)
 }
 
 func NewCMSServiceHandler(svc CMSServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
@@ -51,5 +55,7 @@ func NewCMSServiceHandler(svc CMSServiceHandler, opts ...connect.HandlerOption) 
 	mux.Handle(CMSServiceUploadFileProcedure, connect.NewUnaryHandler(CMSServiceUploadFileProcedure, svc.UploadFile, opts...))
 	mux.Handle(CMSServiceGetACLProcedure, connect.NewUnaryHandler(CMSServiceGetACLProcedure, svc.GetACL, opts...))
 	mux.Handle(CMSServiceSaveACLProcedure, connect.NewUnaryHandler(CMSServiceSaveACLProcedure, svc.SaveACL, opts...))
+	mux.Handle(CMSServiceImportPreviewProcedure, connect.NewUnaryHandler(CMSServiceImportPreviewProcedure, svc.ImportPreview, opts...))
+	mux.Handle(CMSServiceImportSiteProcedure, connect.NewUnaryHandler(CMSServiceImportSiteProcedure, svc.ImportSite, opts...))
 	return "/cms.v1.CMSService/", mux
 }

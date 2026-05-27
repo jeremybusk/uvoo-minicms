@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { App as AntApp, Button, Card, ConfigProvider, Form, Input, Layout, List, Modal, Popconfirm, Select, Space, Switch, Tabs, Typography, Upload, message, theme } from 'antd'
 import type { UploadProps } from 'antd'
 import './style.css'
-import { api, ACLRule, ACLSettings, Asset, NavItem, Page, SiteSettings } from './api'
+import { api, ACLRule, ACLSettings, Asset, ImportOptions, ImportResult, NavItem, Page, SiteSettings } from './api'
 
 const MdxBodyEditor = React.lazy(() => import('./MdxBodyEditor'))
 
@@ -69,6 +69,15 @@ function Root() {
   const [publicPrimary, setPublicPrimary] = useState('#386bc0')
   const [publicSecondary, setPublicSecondary] = useState('#64748b')
   const [publicHeaderStyle, setPublicHeaderStyle] = useState<'neutral'|'accent-line'|'accent-bg'>('neutral')
+  const [importURL, setImportURL] = useState('')
+  const [importMaxPages, setImportMaxPages] = useState(50)
+  const [importIncludePosts, setImportIncludePosts] = useState(true)
+  const [importMenu, setImportMenu] = useState(true)
+  const [importPublish, setImportPublish] = useState(true)
+  const [importUpdateExisting, setImportUpdateExisting] = useState(false)
+  const [importPreview, setImportPreview] = useState<ImportResult | null>(null)
+  const [previewingImport, setPreviewingImport] = useState(false)
+  const [runningImport, setRunningImport] = useState(false)
   const [form] = Form.useForm()
   const [settingsForm] = Form.useForm<SiteSettings>()
   const md = Form.useWatch('markdown', form) ?? ''
@@ -232,6 +241,42 @@ function Root() {
     form.setFieldsValue(p)
     setSourceMode(false)
     setEditorRev(rev => rev + 1)
+  }
+  function currentImportOptions(): ImportOptions {
+    return {
+      url: importURL,
+      max_pages: importMaxPages,
+      include_posts: importIncludePosts,
+      import_menu: importMenu,
+      publish: importPublish,
+      update_existing: importUpdateExisting
+    }
+  }
+  async function previewImportSite() {
+    setPreviewingImport(true)
+    try {
+      const r = await api.importPreview(currentImportOptions())
+      setImportPreview(r.import)
+      message.success(`Found ${r.import.pages.length} page(s)`)
+    } catch(e:any) {
+      message.error(e.message)
+    } finally {
+      setPreviewingImport(false)
+    }
+  }
+  async function runImportSite() {
+    setRunningImport(true)
+    try {
+      const r = await api.importSite(currentImportOptions())
+      setImportPreview(r.import)
+      await loadPages()
+      await loadSettings()
+      message.success(`Imported ${r.import.imported} page(s)`)
+    } catch(e:any) {
+      message.error(e.message)
+    } finally {
+      setRunningImport(false)
+    }
   }
 
   useEffect(() => {
@@ -414,6 +459,56 @@ function Root() {
             </>}</Form.List>
             <Form.Item name="footer_markdown" label="Global footer Markdown" className="footerField"><Input.TextArea rows={6} placeholder="© 2026 Your Company. All rights reserved." /></Form.Item>
           </Form>
+        </Card> },
+        { key:'import', label:'Import', children:<Card className="editorCard">
+          <Space className="topbar" align="start">
+            <div>
+              <Typography.Title level={3}>Import website</Typography.Title>
+              <Typography.Text type="secondary">Pull pages and menu items from WordPress REST, XML sitemaps, or same-site links.</Typography.Text>
+            </div>
+            <Space wrap>
+              <Button onClick={previewImportSite} loading={previewingImport}>Preview</Button>
+              <Button type="primary" onClick={runImportSite} loading={runningImport} disabled={!importPreview?.pages?.length}>Import</Button>
+            </Space>
+          </Space>
+          <Form layout="vertical" className="importForm">
+            <Form.Item label="Website URL" required>
+              <Input value={importURL} onChange={e => setImportURL(e.target.value)} placeholder="https://example.com/" />
+            </Form.Item>
+            <Space className="switchGrid" wrap>
+              <Form.Item label="Max pages">
+                <Input type="number" min={1} max={200} value={importMaxPages} onChange={e => setImportMaxPages(Math.max(1, Math.min(200, Number(e.target.value) || 50)))} />
+              </Form.Item>
+              <Form.Item label="WordPress posts" valuePropName="checked"><Switch checked={importIncludePosts} onChange={setImportIncludePosts} /></Form.Item>
+              <Form.Item label="Menu" valuePropName="checked"><Switch checked={importMenu} onChange={setImportMenu} /></Form.Item>
+              <Form.Item label="Publish" valuePropName="checked"><Switch checked={importPublish} onChange={setImportPublish} /></Form.Item>
+              <Form.Item label="Update existing" valuePropName="checked"><Switch checked={importUpdateExisting} onChange={setImportUpdateExisting} /></Form.Item>
+            </Space>
+          </Form>
+          {importPreview && <div className="importPreview">
+            <Space wrap className="importSummary">
+              <Typography.Text strong>{importPreview.wordpress ? 'WordPress' : importPreview.source || 'Website'} detected</Typography.Text>
+              <Typography.Text type="secondary">{importPreview.pages.length} page(s)</Typography.Text>
+              <Typography.Text type="secondary">{importPreview.menu.length} menu item(s)</Typography.Text>
+              {importPreview.existing > 0 && <Typography.Text type="warning">{importPreview.existing} existing</Typography.Text>}
+              {importPreview.imported > 0 && <Typography.Text type="success">{importPreview.imported} imported</Typography.Text>}
+              {importPreview.skipped > 0 && <Typography.Text type="secondary">{importPreview.skipped} skipped</Typography.Text>}
+            </Space>
+            {importPreview.errors.length > 0 && <List className="importErrors" dataSource={importPreview.errors} renderItem={err => <List.Item><Typography.Text type="danger">{err}</Typography.Text></List.Item>} />}
+            <Typography.Title level={4}>Pages</Typography.Title>
+            <List className="importList" dataSource={importPreview.pages} renderItem={page => <List.Item>
+              <List.Item.Meta
+                title={<Space wrap><span>{page.title}</span>{page.exists && <Typography.Text type="warning">existing</Typography.Text>}</Space>}
+                description={`${page.path} · ${page.content_type} · ${page.source_url}`}
+              />
+            </List.Item>} />
+            {importPreview.menu.length > 0 && <>
+              <Typography.Title level={4}>Menu</Typography.Title>
+              <List className="importList" dataSource={importPreview.menu} renderItem={item => <List.Item>
+                <List.Item.Meta title={item.label} description={`${item.url}${item.parent_id ? ` · child of ${item.parent_id}` : ''}`} />
+              </List.Item>} />
+            </>}
+          </div>}
         </Card> },
         { key:'security', label:'Security', children:<Card className="editorCard">
           <Space className="topbar" align="start">

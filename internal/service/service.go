@@ -15,6 +15,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 	"uvoominicms/internal/db"
+	"uvoominicms/internal/importer"
 )
 
 type Service struct {
@@ -43,6 +44,16 @@ func boolean(m map[string]any, k string) bool {
 		return v
 	}
 	return false
+}
+func number(m map[string]any, k string) int {
+	switch v := m[k].(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	default:
+		return 0
+	}
 }
 
 func (s *Service) Health(ctx context.Context, _ *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error) {
@@ -149,6 +160,24 @@ func (s *Service) SaveACL(ctx context.Context, req *connect.Request[structpb.Str
 	}
 	return ok(map[string]any{"acl": aclMap(settings, rules)})
 }
+func (s *Service) ImportPreview(ctx context.Context, req *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error) {
+	result, err := importer.Importer{}.Preview(ctx, importOptions(fields(req)))
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	return ok(map[string]any{"import": importResultMap(result)})
+}
+func (s *Service) ImportSite(ctx context.Context, req *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error) {
+	opts := importOptions(fields(req))
+	result, err := importer.Importer{}.Import(ctx, s.Store, s.SiteName, opts)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	if err := s.markImportExisting(ctx, &result); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return ok(map[string]any{"import": importResultMap(result)})
+}
 func (s *Service) UploadFile(ctx context.Context, req *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error) {
 	m := fields(req)
 	name := safeName(str(m, "name"))
@@ -186,6 +215,89 @@ func (s *Service) UploadFile(ctx context.Context, req *connect.Request[structpb.
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return ok(map[string]any{"asset": assetMap(a)})
+}
+
+func importOptions(m map[string]any) importer.Options {
+	maxPages := number(m, "max_pages")
+	if maxPages <= 0 {
+		maxPages = 50
+	}
+	return importer.Options{
+		URL:            str(m, "url"),
+		MaxPages:       maxPages,
+		IncludePosts:   boolean(m, "include_posts"),
+		ImportMenu:     boolean(m, "import_menu"),
+		Publish:        boolean(m, "publish"),
+		UpdateExisting: boolean(m, "update_existing"),
+	}
+}
+
+func (s *Service) markImportExisting(ctx context.Context, result *importer.Result) error {
+	pages, err := s.Store.ListPages(ctx)
+	if err != nil {
+		return err
+	}
+	bySlug := map[string]bool{}
+	byPath := map[string]bool{}
+	for _, page := range pages {
+		bySlug[page.Slug] = true
+		byPath[page.Path] = true
+	}
+	result.Existing = 0
+	for i := range result.Pages {
+		exists := bySlug[result.Pages[i].Slug] || byPath[result.Pages[i].Path]
+		result.Pages[i].Exists = exists
+		if exists {
+			result.Existing++
+		}
+	}
+	return nil
+}
+
+func importResultMap(result importer.Result) map[string]any {
+	pages := make([]any, 0, len(result.Pages))
+	for _, page := range result.Pages {
+		pages = append(pages, map[string]any{
+			"slug":             page.Slug,
+			"path":             page.Path,
+			"title":            page.Title,
+			"meta_description": page.MetaDescription,
+			"content_type":     page.ContentType,
+			"tags":             page.Tags,
+			"markdown":         page.Markdown,
+			"source_url":       page.SourceURL,
+			"published":        page.Published,
+			"exists":           page.Exists,
+		})
+	}
+	menu := make([]any, 0, len(result.Menu))
+	for _, item := range result.Menu {
+		menu = append(menu, map[string]any{
+			"id":        item.ID,
+			"parent_id": item.ParentID,
+			"label":     item.Label,
+			"url":       item.URL,
+			"external":  item.External,
+			"enabled":   item.Enabled,
+		})
+	}
+	errors := make([]any, 0, len(result.Errors))
+	for _, err := range result.Errors {
+		errors = append(errors, err)
+	}
+	return map[string]any{
+		"source":        result.Source,
+		"base_url":      result.BaseURL,
+		"pages":         pages,
+		"menu":          menu,
+		"imported":      result.Imported,
+		"skipped":       result.Skipped,
+		"errors":        errors,
+		"existing":      result.Existing,
+		"wordpress":     result.WordPress,
+		"sitemap_url":   result.SitemapURL,
+		"preview_limit": result.PreviewLimit,
+	}
 }
 
 func pageMap(p db.Page, body bool) map[string]any {

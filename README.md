@@ -155,6 +155,17 @@ UvooMiniCMS keeps the editing model intentionally small:
 
 The `home` admin slug is reserved for `/` and cannot be deleted.
 
+## Website Import
+
+The admin `Import` tab can create CMS pages from an existing website URL.
+
+- WordPress sites are imported through the public REST API when available.
+- XML sitemaps are discovered through `robots.txt` and common paths such as `/sitemap.xml` and `/wp-sitemap.xml`.
+- If no sitemap is available, the importer falls back to same-site links found on the homepage.
+- Imported HTML content is converted to Markdown and saved as normal CMS pages/posts.
+- Menu import prefers WordPress menu endpoints, then falls back to homepage navigation links.
+- Existing routes are skipped by default; enable `Update existing` to overwrite matching slugs or paths.
+
 ## Site Settings
 
 The admin `Site` tab manages simple global pieces shared by every public page:

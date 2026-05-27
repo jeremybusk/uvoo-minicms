@@ -16,4 +16,6 @@ service CMSService {
   rpc UploadFile(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc GetACL(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc SaveACL(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc ImportPreview(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc ImportSite(google.protobuf.Struct) returns (google.protobuf.Struct);
 }

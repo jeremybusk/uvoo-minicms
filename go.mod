@@ -12,5 +12,6 @@ require (
 
 require (
 	github.com/oschwald/maxminddb-golang v1.13.0 // indirect
-	golang.org/x/sys v0.20.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 )

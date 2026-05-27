@@ -46,6 +46,39 @@ export type SiteSettings = {
   search_enabled:boolean
   nav_layout:'top'|'side'
 }
+export type ImportPage = {
+  slug:string
+  path:string
+  title:string
+  meta_description:string
+  content_type:'page'|'post'
+  tags:string
+  markdown:string
+  source_url:string
+  published:boolean
+  exists:boolean
+}
+export type ImportOptions = {
+  url:string
+  max_pages:number
+  include_posts:boolean
+  import_menu:boolean
+  publish:boolean
+  update_existing:boolean
+}
+export type ImportResult = {
+  source:string
+  base_url:string
+  pages:ImportPage[]
+  menu:NavItem[]
+  imported:number
+  skipped:number
+  errors:string[]
+  existing:number
+  wordpress:boolean
+  sitemap_url:string
+  preview_limit:number
+}
 
 const base = '/cms.v1.CMSService/'
 async function rpc<T>(name: string, body: Record<string, unknown> = {}): Promise<T> {
@@ -63,5 +96,7 @@ export const api = {
   listAssets: () => rpc<{assets:Asset[]}>('ListAssets'),
   uploadFile: (name:string, data:string) => rpc<{asset:Asset}>('UploadFile', { name, data }),
   getACL: () => rpc<{acl:ACLSettings}>('GetACL'),
-  saveACL: (acl: ACLSettings) => rpc<{acl:ACLSettings}>('SaveACL', acl)
+  saveACL: (acl: ACLSettings) => rpc<{acl:ACLSettings}>('SaveACL', acl),
+  importPreview: (opts: ImportOptions) => rpc<{import:ImportResult}>('ImportPreview', opts),
+  importSite: (opts: ImportOptions) => rpc<{import:ImportResult}>('ImportSite', opts)
 }
