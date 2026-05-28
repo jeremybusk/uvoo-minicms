@@ -467,6 +467,8 @@ func shouldSkipElement(n *html.Node) bool {
 		"w-embed",
 		"w-script",
 		"elfsight",
+		"cspt-meta-comments",
+		"comment-count",
 	}
 	for _, marker := range skipClasses {
 		if strings.Contains(className, marker) || strings.Contains(id, marker) {

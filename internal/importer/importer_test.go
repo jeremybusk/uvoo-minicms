@@ -186,6 +186,24 @@ func TestHTMLToMarkdownKeepsLinkedImagesAndIconOnlyLinks(t *testing.T) {
 	}
 }
 
+func TestHTMLToMarkdownSkipsBuilderCommentCounts(t *testing.T) {
+	base := mustURL(t, "https://example.com/")
+	got := HTMLToMarkdown(`<article>
+<img src="/post.jpg" alt="Post">
+<h3>Post Title</h3>
+<a href="/author/scott/">by Scott Driggs</a>
+<span class="cspt-meta cspt-meta-comments">0</span>
+</article>`, base)
+	if strings.Contains(got, "\n0\n") || strings.HasSuffix(strings.TrimSpace(got), "\n0") {
+		t.Fatalf("expected builder comment count to be skipped, got:\n%s", got)
+	}
+	for _, want := range []string{"![Post](https://example.com/post.jpg)", "Post Title", "[by Scott Driggs](/author/scott)"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in markdown, got:\n%s", want, got)
+		}
+	}
+}
+
 func TestSupplementalMediaMarkdownFindsBackgroundImages(t *testing.T) {
 	base := mustURL(t, "https://example.com/")
 	got := supplementalMediaMarkdown(`<div style="background-image:url('/uploads/hero.jpg')"></div><div style="background-image:url('/uploads/pattern.png')"></div>`, base, "")
