@@ -300,13 +300,14 @@ func importOptions(m map[string]any) importer.Options {
 		maxPages = 50
 	}
 	return importer.Options{
-		URL:            str(m, "url"),
-		MaxPages:       maxPages,
-		IncludePosts:   boolean(m, "include_posts"),
-		ImportMenu:     boolean(m, "import_menu"),
-		Publish:        boolean(m, "publish"),
-		UpdateExisting: boolean(m, "update_existing"),
-		DownloadImages: boolean(m, "download_images"),
+		URL:              str(m, "url"),
+		MaxPages:         maxPages,
+		IncludePosts:     boolean(m, "include_posts"),
+		ImportMenu:       boolean(m, "import_menu"),
+		Publish:          boolean(m, "publish"),
+		UpdateExisting:   boolean(m, "update_existing"),
+		DownloadImages:   boolean(m, "download_images"),
+		AdvancedScraping: boolean(m, "advanced_scraping"),
 	}
 }
 

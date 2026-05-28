@@ -2,7 +2,10 @@ package importer
 
 import (
 	"bytes"
+	"fmt"
+	stdhtml "html"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -11,9 +14,9 @@ import (
 func HTMLToText(raw string) string {
 	doc, err := html.Parse(strings.NewReader(raw))
 	if err != nil {
-		return strings.Join(strings.Fields(raw), " ")
+		return strings.Join(strings.Fields(scrubBuilderShortcodes(raw)), " ")
 	}
-	return strings.Join(strings.Fields(nodeText(doc)), " ")
+	return strings.Join(strings.Fields(scrubBuilderShortcodes(nodeText(doc))), " ")
 }
 
 func HTMLToMarkdown(raw string, base *url.URL) string {
@@ -134,7 +137,15 @@ func renderNode(b *strings.Builder, n *html.Node, base *url.URL, depth int) {
 	case "a":
 		label := strings.TrimSpace(nodeText(n))
 		href := absoluteURL(base, attr(n, "href"))
+		if label == "" && hasDescendantImage(n) {
+			renderChildren(b, n, base, depth)
+			return
+		}
 		if label == "" {
+			label = strings.TrimSpace(firstNonEmpty(attr(n, "aria-label"), attr(n, "title")))
+		}
+		if label == "" {
+			renderChildren(b, n, base, depth)
 			return
 		}
 		if href == "" || strings.HasPrefix(href, "#") {
@@ -150,7 +161,7 @@ func renderNode(b *strings.Builder, n *html.Node, base *url.URL, depth int) {
 		b.WriteString(markdownURL(href))
 		b.WriteString(")")
 	case "img":
-		src := absoluteURL(base, attr(n, "src"))
+		src := imageNodeURL(n, base)
 		if src == "" || isDecorativeImage(n, src) {
 			return
 		}
@@ -174,6 +185,7 @@ func renderToString(n *html.Node, base *url.URL, depth int) string {
 }
 
 func cleanMarkdown(s string) string {
+	s = scrubBuilderShortcodes(s)
 	lines := strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
 	var out []string
 	blank := false
@@ -190,6 +202,87 @@ func cleanMarkdown(s string) string {
 		blank = false
 	}
 	return strings.TrimSpace(strings.Join(out, "\n")) + "\n"
+}
+
+var (
+	rawShortcodeRe    = regexp.MustCompile(`(?is)\[(vc_raw_html|vc_raw_js)[^\]]*\].*?\[/\s*(vc_raw_html|vc_raw_js)\s*\]`)
+	shortcodeRe       = regexp.MustCompile(`\[\s*(/?)\s*([A-Za-z0-9_-]+)([^\]]*)\]`)
+	shortcodeTextRe   = regexp.MustCompile(`(?is)(?:^|\s)(text|title)\s*=\s*(?:"([^"]*)"|'([^']*)'|[“”]([^“”]*)[“”])`)
+	shortcodeHTMLRe   = regexp.MustCompile(`(?is)<[^>]+>`)
+	shortcodeSpacesRe = regexp.MustCompile(`[ \t]{2,}`)
+)
+
+func scrubBuilderShortcodes(s string) string {
+	s = rawShortcodeRe.ReplaceAllString(s, "")
+	s = shortcodeRe.ReplaceAllStringFunc(s, func(match string) string {
+		parts := shortcodeRe.FindStringSubmatch(match)
+		if len(parts) != 4 {
+			return match
+		}
+		closing, name, attrs := parts[1] == "/", strings.ToLower(parts[2]), parts[3]
+		if !isBuilderShortcode(name) {
+			return match
+		}
+		if closing {
+			if isBuilderBlockShortcode(name) {
+				return "\n\n"
+			}
+			return ""
+		}
+		switch name {
+		case "vc_custom_heading", "vc_btn":
+			if text := shortcodeAttrText(attrs); text != "" {
+				return "\n\n" + text + "\n\n"
+			}
+		}
+		if isBuilderBlockShortcode(name) {
+			return "\n\n"
+		}
+		return ""
+	})
+	s = strings.ReplaceAll(s, "[/]", "")
+	s = shortcodeSpacesRe.ReplaceAllString(s, " ")
+	return s
+}
+
+func isBuilderShortcode(name string) bool {
+	if strings.HasPrefix(name, "vc_") || strings.HasPrefix(name, "vc-") {
+		return true
+	}
+	switch name {
+	case "contact-form-7", "rev_slider", "gravityform":
+		return true
+	default:
+		return false
+	}
+}
+
+func isBuilderBlockShortcode(name string) bool {
+	switch name {
+	case "vc_row", "vc_row_inner", "vc_column", "vc_column_inner", "vc_column_text", "vc_message", "vc_cta", "vc_toggle", "vc_tta_section", "vc_tta_tabs", "vc_tta_accordion":
+		return true
+	default:
+		return false
+	}
+}
+
+func shortcodeAttrText(attrs string) string {
+	attrs = stdhtml.UnescapeString(attrs)
+	match := shortcodeTextRe.FindStringSubmatch(attrs)
+	if len(match) == 0 {
+		return ""
+	}
+	for _, value := range match[2:] {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		value = stdhtml.UnescapeString(value)
+		value = shortcodeHTMLRe.ReplaceAllString(value, "")
+		value = strings.Join(strings.Fields(value), " ")
+		return value
+	}
+	return ""
 }
 
 func needsSpace(current string) bool {
@@ -313,6 +406,47 @@ func attr(n *html.Node, key string) string {
 	return ""
 }
 
+func imageNodeURL(n *html.Node, base *url.URL) string {
+	for _, key := range []string{"src", "data-src", "data-lazy-src", "data-original"} {
+		if src := absoluteURL(base, attr(n, key)); src != "" && !strings.HasPrefix(src, "data:") {
+			return src
+		}
+	}
+	return absoluteURL(base, bestSrcsetURL(attr(n, "srcset")))
+}
+
+func hasDescendantImage(n *html.Node) bool {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode && c.Data == "img" {
+			return true
+		}
+		if hasDescendantImage(c) {
+			return true
+		}
+	}
+	return false
+}
+
+func bestSrcsetURL(raw string) string {
+	var bestURL string
+	var bestWidth int
+	for _, candidate := range strings.Split(raw, ",") {
+		fields := strings.Fields(strings.TrimSpace(candidate))
+		if len(fields) == 0 {
+			continue
+		}
+		width := 1
+		if len(fields) > 1 && strings.HasSuffix(fields[1], "w") {
+			fmt.Sscanf(strings.TrimSuffix(fields[1], "w"), "%d", &width)
+		}
+		if bestURL == "" || width > bestWidth {
+			bestURL = fields[0]
+			bestWidth = width
+		}
+	}
+	return bestURL
+}
+
 func shouldSkipElement(n *html.Node) bool {
 	if n.Type != html.ElementNode {
 		return false
@@ -333,6 +467,8 @@ func shouldSkipElement(n *html.Node) bool {
 		"w-embed",
 		"w-script",
 		"elfsight",
+		"cspt-meta-comments",
+		"comment-count",
 	}
 	for _, marker := range skipClasses {
 		if strings.Contains(className, marker) || strings.Contains(id, marker) {

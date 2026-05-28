@@ -9,6 +9,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	stdhtml "html"
 	"io"
 	"mime"
 	"net/http"
@@ -25,7 +26,7 @@ import (
 	"uvoominicms/internal/db"
 )
 
-const defaultMaxPages = 50
+const defaultMaxPages = 100
 const defaultRequestTimeout = 6 * time.Second
 
 type Importer struct {
@@ -33,14 +34,15 @@ type Importer struct {
 }
 
 type Options struct {
-	URL            string
-	MaxPages       int
-	IncludePosts   bool
-	ImportMenu     bool
-	Publish        bool
-	UpdateExisting bool
-	DownloadImages bool
-	PreviewOnly    bool
+	URL              string
+	MaxPages         int
+	IncludePosts     bool
+	ImportMenu       bool
+	Publish          bool
+	UpdateExisting   bool
+	DownloadImages   bool
+	AdvancedScraping bool
+	PreviewOnly      bool
 }
 
 type Result struct {
@@ -221,7 +223,7 @@ func (i Importer) previewWordPress(ctx context.Context, base *url.URL, opts Opti
 			continue
 		}
 		for _, item := range items {
-			page := wpPostToPage(base, item, collection.Kind, opts.Publish)
+			page := wpPostToPage(base, item, collection.Kind, opts.Publish, opts.AdvancedScraping)
 			if page.Title != "" && page.Path != "" {
 				pages = append(pages, page)
 			}
@@ -241,7 +243,7 @@ func (i Importer) previewWordPress(ctx context.Context, base *url.URL, opts Opti
 		result.Menu = i.fetchHomepageMenu(ctx, base)
 	}
 	if len(result.Menu) > 0 {
-		result.Pages = i.prioritizeMenuPages(ctx, base, result.Pages, result.Menu, opts.MaxPages, opts.Publish, opts.PreviewOnly)
+		result.Pages = i.prioritizeMenuPages(ctx, base, result.Pages, result.Menu, opts.MaxPages, opts.Publish, opts.PreviewOnly, opts.AdvancedScraping)
 	}
 	return result, nil
 }
@@ -251,7 +253,7 @@ type menuPageLink struct {
 	Label string
 }
 
-func (i Importer) prioritizeMenuPages(ctx context.Context, base *url.URL, pages []Page, menu []db.NavItem, max int, publish, previewOnly bool) []Page {
+func (i Importer) prioritizeMenuPages(ctx context.Context, base *url.URL, pages []Page, menu []db.NavItem, max int, publish, previewOnly, advanced bool) []Page {
 	if max <= 0 || len(menu) == 0 {
 		return pages
 	}
@@ -288,7 +290,7 @@ func (i Importer) prioritizeMenuPages(ctx context.Context, base *url.URL, pages 
 			}
 			continue
 		}
-		page, err := i.fetchHTMLPage(ctx, base, raw, publish)
+		page, err := i.fetchHTMLPageWithOptions(ctx, base, raw, publish, advanced)
 		if err != nil || page.Path == "" || added[page.Path] {
 			continue
 		}
@@ -459,7 +461,7 @@ func (i Importer) previewSitemap(ctx context.Context, base *url.URL, opts Option
 	}
 	pages := make([]Page, 0, len(urls))
 	for _, rawURL := range urls {
-		page, err := i.fetchHTMLPage(ctx, base, rawURL, opts.Publish)
+		page, err := i.fetchHTMLPageWithOptions(ctx, base, rawURL, opts.Publish, opts.AdvancedScraping)
 		if err != nil {
 			continue
 		}
@@ -604,6 +606,10 @@ func skipSitemapChild(raw string) bool {
 }
 
 func (i Importer) fetchHTMLPage(ctx context.Context, base *url.URL, rawURL string, publish bool) (Page, error) {
+	return i.fetchHTMLPageWithOptions(ctx, base, rawURL, publish, false)
+}
+
+func (i Importer) fetchHTMLPageWithOptions(ctx context.Context, base *url.URL, rawURL string, publish, advanced bool) (Page, error) {
 	body, _, err := i.getBytes(ctx, rawURL)
 	if err != nil {
 		return Page{}, err
@@ -619,6 +625,9 @@ func (i Importer) fetchHTMLPage(ctx context.Context, base *url.URL, rawURL strin
 		content = firstNode(doc, "body")
 	}
 	markdown := "# " + title + "\n\n" + HTMLNodeToMarkdown(content, base)
+	if advanced {
+		markdown += supplementalMediaMarkdown(string(body), base, markdown)
+	}
 	routePath := routePathFromURL(base, rawURL)
 	return Page{
 		Slug:            slugFromPath(routePath),
@@ -659,6 +668,7 @@ func (i Importer) fetchHomepageMenu(ctx context.Context, base *url.URL) []db.Nav
 }
 
 var markdownImageRe = regexp.MustCompile(`!\[([^\]]*)\]\((https?://[^)\s]+)\)`)
+var cssImageURLRe = regexp.MustCompile(`(?is)background(?:-image)?\s*:[^;{}]*url\(\s*['"]?([^'")\s]+)`)
 
 func (i Importer) localizeImages(ctx context.Context, store *db.Store, uploadDir, markdown string, cache map[string]string, failures map[string]bool) (string, []string) {
 	var errors []string
@@ -690,6 +700,78 @@ func (i Importer) localizeImages(ctx context.Context, store *db.Store, uploadDir
 		return fmt.Sprintf("![%s](%s)", parts[1], localURL)
 	})
 	return out, errors
+}
+
+func supplementalMediaMarkdown(raw string, base *url.URL, existing string) string {
+	var b strings.Builder
+	for _, imageURL := range supplementalImageURLs(raw, base) {
+		if strings.Contains(existing, imageURL) || strings.Contains(existing, markdownURL(imageURL)) {
+			continue
+		}
+		alt := titleFromPath(imageURL)
+		b.WriteString("\n\n![")
+		b.WriteString(alt)
+		b.WriteString("](")
+		b.WriteString(markdownURL(imageURL))
+		b.WriteString(")")
+	}
+	return b.String()
+}
+
+func supplementalImageURLs(raw string, base *url.URL) []string {
+	var out []string
+	add := func(rawURL string) {
+		imageURL := absoluteURL(base, stdhtml.UnescapeString(rawURL))
+		if imageURL == "" || strings.HasPrefix(imageURL, "data:") || imageExt(imageURL, "") == "" || isLikelyDecorativeImageURL(imageURL) {
+			return
+		}
+		out = appendUnique(out, imageURL)
+	}
+	if doc, err := html.Parse(strings.NewReader(raw)); err == nil {
+		var walk func(*html.Node)
+		walk = func(n *html.Node) {
+			if n.Type == html.ElementNode {
+				if n.Data == "img" {
+					if src := imageNodeURL(n, base); src != "" && !isDecorativeImage(n, src) {
+						add(src)
+					}
+				}
+				for _, key := range []string{"style", "data-bg", "data-background", "data-bg-image"} {
+					if value := attr(n, key); value != "" {
+						for _, match := range cssImageURLRe.FindAllStringSubmatch(stdhtml.UnescapeString(value), -1) {
+							if len(match) == 2 {
+								add(match[1])
+							}
+						}
+					}
+				}
+			}
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				walk(c)
+			}
+		}
+		walk(doc)
+	}
+	for _, match := range cssImageURLRe.FindAllStringSubmatch(stdhtml.UnescapeString(raw), -1) {
+		if len(match) == 2 {
+			add(match[1])
+		}
+	}
+	return out
+}
+
+func isLikelyDecorativeImageURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return true
+	}
+	name := strings.ToLower(path.Base(u.Path))
+	for _, marker := range []string{"arrow", "caret", "chevron", "icon", "logo", "overlay", "pattern", "shape", "spacer", "spinner", "texture", "vector"} {
+		if strings.Contains(name, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func (i Importer) downloadImage(ctx context.Context, store *db.Store, uploadDir, remote string) (string, error) {
@@ -1007,12 +1089,15 @@ func (i Importer) getBytes(ctx context.Context, rawURL string) ([]byte, string, 
 	return body, resp.Header.Get("Content-Type"), err
 }
 
-func wpPostToPage(base *url.URL, post wpPost, contentType string, publish bool) Page {
+func wpPostToPage(base *url.URL, post wpPost, contentType string, publish, advanced bool) Page {
 	title := firstNonEmpty(HTMLToText(post.Title.Rendered), titleFromPath(post.Link), post.Slug)
 	description := truncate(HTMLToText(post.Excerpt.Rendered), 180)
 	markdownBody := HTMLToMarkdown(post.Content.Rendered, base)
 	if markdownBody == "" {
 		markdownBody = HTMLToText(post.Excerpt.Rendered)
+	}
+	if advanced {
+		markdownBody += supplementalMediaMarkdown(post.Content.Rendered, base, markdownBody)
 	}
 	routePath := routePathFromURL(base, post.Link)
 	return Page{

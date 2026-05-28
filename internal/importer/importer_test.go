@@ -145,6 +145,87 @@ func TestHomepageMenuPreservesDropdownParents(t *testing.T) {
 	}
 }
 
+func TestHTMLToMarkdownScrubsBuilderShortcodes(t *testing.T) {
+	base := mustURL(t, "https://example.com/")
+	got := HTMLToMarkdown(`<div class="wpb-content-wrapper"><p>[vc_row][vc_column][vc_empty_space height="60px"][vc_column_text css=""]</p>
+<p>We work with private equity and family office firms to recruit financial and operational executives.</p>
+<p>[/vc_column_text][vc_custom_heading text=&#8221;Titles of Positions Placed:&#8221; font_container=&#8221;tag:h4|text_align:center&#8221;][vc_message icon_fontawesome="fa fa-solid fa-user-tie"]Chief Financial Officer[/vc_message][vc_empty_space height="20px"][vc_message]Director of Finance[/vc_message][vc_raw_html]U0hPVUxEX05PVF9SRU5ERVI=[/vc_raw_html][/vc_column][/vc_row]</p></div>`, base)
+	if strings.Contains(got, "[vc_") || strings.Contains(got, "[/vc_") || strings.Contains(got, "U0hPVUxEX05PVF9SRU5ERVI") {
+		t.Fatalf("expected builder shortcodes to be scrubbed, got:\n%s", got)
+	}
+	for _, want := range []string{
+		"We work with private equity and family office firms",
+		"Titles of Positions Placed:",
+		"Chief Financial Officer",
+		"Director of Finance",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in markdown, got:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "OfficerDirector") {
+		t.Fatalf("expected message shortcodes to be separated, got:\n%s", got)
+	}
+}
+
+func TestHTMLToTextScrubsBuilderShortcodes(t *testing.T) {
+	got := HTMLToText(`<p>[vc_row][vc_column][vc_column_text]Preparing for an interview is essential because it significantly increases your chances of success.[/vc_column_text][/vc_column][/vc_row]</p>`)
+	if strings.Contains(got, "[vc_") || strings.Contains(got, "vc_column") {
+		t.Fatalf("expected builder shortcodes to be scrubbed, got %q", got)
+	}
+	want := "Preparing for an interview is essential because it significantly increases your chances of success."
+	if got != want {
+		t.Fatalf("unexpected text:\ngot  %q\nwant %q", got, want)
+	}
+}
+
+func TestHTMLToMarkdownKeepsLinkedImagesAndIconOnlyLinks(t *testing.T) {
+	base := mustURL(t, "https://example.com/")
+	got := HTMLToMarkdown(`<article>
+<a href="/team/scott/"><img src="/uploads/scott.jpg" alt="Scott Driggs"></a>
+<h3><a href="/team/scott/">Scott Driggs</a></h3>
+<a href="https://www.linkedin.com/in/scottdriggs" title="LinkedIn" target="_blank"><span><i class="icon-linkedin"></i></span></a>
+</article>`, base)
+	for _, want := range []string{
+		"![Scott Driggs](https://example.com/uploads/scott.jpg)",
+		"### Scott Driggs",
+		"[LinkedIn](https://www.linkedin.com/in/scottdriggs)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in markdown, got:\n%s", want, got)
+		}
+	}
+}
+
+func TestHTMLToMarkdownSkipsBuilderCommentCounts(t *testing.T) {
+	base := mustURL(t, "https://example.com/")
+	got := HTMLToMarkdown(`<article>
+<img src="/post.jpg" alt="Post">
+<h3>Post Title</h3>
+<a href="/author/scott/">by Scott Driggs</a>
+<span class="cspt-meta cspt-meta-comments">0</span>
+</article>`, base)
+	if strings.Contains(got, "\n0\n") || strings.HasSuffix(strings.TrimSpace(got), "\n0") {
+		t.Fatalf("expected builder comment count to be skipped, got:\n%s", got)
+	}
+	for _, want := range []string{"![Post](https://example.com/post.jpg)", "Post Title", "[by Scott Driggs](/author/scott)"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in markdown, got:\n%s", want, got)
+		}
+	}
+}
+
+func TestSupplementalMediaMarkdownFindsBackgroundImages(t *testing.T) {
+	base := mustURL(t, "https://example.com/")
+	got := supplementalMediaMarkdown(`<div style="background-image:url('/uploads/hero.jpg')"></div><div style="background-image:url('/uploads/pattern.png')"></div>`, base, "")
+	if !strings.Contains(got, "![Hero.jpg](https://example.com/uploads/hero.jpg)") {
+		t.Fatalf("expected supplemental background image, got:\n%s", got)
+	}
+	if strings.Contains(got, "pattern.png") {
+		t.Fatalf("expected decorative pattern to be skipped, got:\n%s", got)
+	}
+}
+
 func TestPreviewWordPressAddsMenuLinkedPagesFromHomepage(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/wp-json/", func(w http.ResponseWriter, r *http.Request) {
