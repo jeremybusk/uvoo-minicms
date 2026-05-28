@@ -215,6 +215,7 @@ Icon names map to Font Awesome solid classes, so `{{icon:rocket}}` becomes `fa-s
 | `CMS_DATA_DIR` | `./data` | Data root. |
 | `CMS_DB` | `./data/cms.db` | SQLite DB path. |
 | `CMS_UPLOAD_DIR` | `./data/uploads` | Upload directory. |
+| `CMS_WEB_ROOT` | `web/dist` | Admin React build directory. Package installs normally use `/usr/share/uvoominicms/web/dist`. |
 | `CMS_MAX_UPLOAD_BYTES` | `26214400` | Max upload size. |
 | `CMS_TLS_CERT` | empty | TLS certificate file. Requires `CMS_TLS_KEY`; enables HTTPS when both are set. |
 | `CMS_TLS_KEY` | empty | TLS private key file. Requires `CMS_TLS_CERT`. |
@@ -229,10 +230,18 @@ Common CLI flags mirror the most useful env vars:
 
 ```bash
 uvoominicms -addr :8443 -db ./data/cms.db -uploads ./data/uploads \
+  -web-root /usr/share/uvoominicms/web/dist \
   -admin-user admin -admin-pass 'change-me' \
   -allow-cidrs '203.0.113.10/32,2001:db8::/32' \
   -maxmind-db ./GeoLite2-Country.mmdb -allow-countries US,CA \
   -tls-cert ./certs/site.crt -tls-key ./certs/site.key
+```
+
+Multiple instances can share the same packaged admin React build by pointing each process at the package web root while keeping instance state separate:
+
+```bash
+uvoominicms -addr :8082 -db /var/lib/uvoominicms/site-a/cms.db -uploads /var/lib/uvoominicms/site-a/uploads -web-root /usr/share/uvoominicms/web/dist
+uvoominicms -addr :8083 -db /var/lib/uvoominicms/site-b/cms.db -uploads /var/lib/uvoominicms/site-b/uploads -web-root /usr/share/uvoominicms/web/dist
 ```
 
 ## Security ACLs

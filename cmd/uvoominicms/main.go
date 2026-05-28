@@ -30,7 +30,7 @@ func main() {
 
 	svc := &service.Service{Store: store, UploadDir: cfg.UploadDir, MaxUploadBytes: cfg.MaxUploadBytes, SiteName: cfg.PublicSiteName}
 	_, api := cmsv1connect.NewCMSServiceHandler(svc)
-	admin := http.FileServer(http.Dir("web/dist"))
+	admin := http.FileServer(http.Dir(cfg.WebRoot))
 	uploads := http.StripPrefix("/uploads/", http.FileServer(http.Dir(cfg.UploadDir)))
 	pub := web.NewPublic(store, cfg.PublicSiteName)
 	adminACL := acl.Filter{Store: store, Scope: "admin", TrustProxy: cfg.TrustProxyHeaders}
@@ -49,7 +49,7 @@ func main() {
 		log.Fatal("both TLS cert and key must be provided")
 	}
 	srv := &http.Server{Addr: cfg.Addr, Handler: secureHeaders(mux), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 4 * time.Minute, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 1 << 20}
-	log.Printf("uvoominicms listening on %s db=%s uploads=%s tls=%t", cfg.Addr, cfg.DBPath, filepath.Clean(cfg.UploadDir), tlsEnabled)
+	log.Printf("uvoominicms listening on %s db=%s uploads=%s web-root=%s tls=%t", cfg.Addr, cfg.DBPath, filepath.Clean(cfg.UploadDir), filepath.Clean(cfg.WebRoot), tlsEnabled)
 	if tlsEnabled {
 		log.Fatal(srv.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile))
 	}
