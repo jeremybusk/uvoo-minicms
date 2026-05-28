@@ -2,7 +2,9 @@ package importer
 
 import (
 	"bytes"
+	stdhtml "html"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -174,6 +176,7 @@ func renderToString(n *html.Node, base *url.URL, depth int) string {
 }
 
 func cleanMarkdown(s string) string {
+	s = scrubBuilderShortcodes(s)
 	lines := strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
 	var out []string
 	blank := false
@@ -190,6 +193,87 @@ func cleanMarkdown(s string) string {
 		blank = false
 	}
 	return strings.TrimSpace(strings.Join(out, "\n")) + "\n"
+}
+
+var (
+	rawShortcodeRe    = regexp.MustCompile(`(?is)\[(vc_raw_html|vc_raw_js)[^\]]*\].*?\[/\s*(vc_raw_html|vc_raw_js)\s*\]`)
+	shortcodeRe       = regexp.MustCompile(`\[\s*(/?)\s*([A-Za-z0-9_-]+)([^\]]*)\]`)
+	shortcodeTextRe   = regexp.MustCompile(`(?is)(?:^|\s)(text|title)\s*=\s*(?:"([^"]*)"|'([^']*)'|[“”]([^“”]*)[“”])`)
+	shortcodeHTMLRe   = regexp.MustCompile(`(?is)<[^>]+>`)
+	shortcodeSpacesRe = regexp.MustCompile(`[ \t]{2,}`)
+)
+
+func scrubBuilderShortcodes(s string) string {
+	s = rawShortcodeRe.ReplaceAllString(s, "")
+	s = shortcodeRe.ReplaceAllStringFunc(s, func(match string) string {
+		parts := shortcodeRe.FindStringSubmatch(match)
+		if len(parts) != 4 {
+			return match
+		}
+		closing, name, attrs := parts[1] == "/", strings.ToLower(parts[2]), parts[3]
+		if !isBuilderShortcode(name) {
+			return match
+		}
+		if closing {
+			if isBuilderBlockShortcode(name) {
+				return "\n\n"
+			}
+			return ""
+		}
+		switch name {
+		case "vc_custom_heading", "vc_btn":
+			if text := shortcodeAttrText(attrs); text != "" {
+				return "\n\n" + text + "\n\n"
+			}
+		}
+		if isBuilderBlockShortcode(name) {
+			return "\n\n"
+		}
+		return ""
+	})
+	s = strings.ReplaceAll(s, "[/]", "")
+	s = shortcodeSpacesRe.ReplaceAllString(s, " ")
+	return s
+}
+
+func isBuilderShortcode(name string) bool {
+	if strings.HasPrefix(name, "vc_") || strings.HasPrefix(name, "vc-") {
+		return true
+	}
+	switch name {
+	case "contact-form-7", "rev_slider", "gravityform":
+		return true
+	default:
+		return false
+	}
+}
+
+func isBuilderBlockShortcode(name string) bool {
+	switch name {
+	case "vc_row", "vc_row_inner", "vc_column", "vc_column_inner", "vc_column_text", "vc_message", "vc_cta", "vc_toggle", "vc_tta_section", "vc_tta_tabs", "vc_tta_accordion":
+		return true
+	default:
+		return false
+	}
+}
+
+func shortcodeAttrText(attrs string) string {
+	attrs = stdhtml.UnescapeString(attrs)
+	match := shortcodeTextRe.FindStringSubmatch(attrs)
+	if len(match) == 0 {
+		return ""
+	}
+	for _, value := range match[2:] {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		value = stdhtml.UnescapeString(value)
+		value = shortcodeHTMLRe.ReplaceAllString(value, "")
+		value = strings.Join(strings.Fields(value), " ")
+		return value
+	}
+	return ""
 }
 
 func needsSpace(current string) bool {

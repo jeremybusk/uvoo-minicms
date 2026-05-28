@@ -145,6 +145,29 @@ func TestHomepageMenuPreservesDropdownParents(t *testing.T) {
 	}
 }
 
+func TestHTMLToMarkdownScrubsBuilderShortcodes(t *testing.T) {
+	base := mustURL(t, "https://example.com/")
+	got := HTMLToMarkdown(`<div class="wpb-content-wrapper"><p>[vc_row][vc_column][vc_empty_space height="60px"][vc_column_text css=""]</p>
+<p>We work with private equity and family office firms to recruit financial and operational executives.</p>
+<p>[/vc_column_text][vc_custom_heading text=&#8221;Titles of Positions Placed:&#8221; font_container=&#8221;tag:h4|text_align:center&#8221;][vc_message icon_fontawesome="fa fa-solid fa-user-tie"]Chief Financial Officer[/vc_message][vc_empty_space height="20px"][vc_message]Director of Finance[/vc_message][vc_raw_html]U0hPVUxEX05PVF9SRU5ERVI=[/vc_raw_html][/vc_column][/vc_row]</p></div>`, base)
+	if strings.Contains(got, "[vc_") || strings.Contains(got, "[/vc_") || strings.Contains(got, "U0hPVUxEX05PVF9SRU5ERVI") {
+		t.Fatalf("expected builder shortcodes to be scrubbed, got:\n%s", got)
+	}
+	for _, want := range []string{
+		"We work with private equity and family office firms",
+		"Titles of Positions Placed:",
+		"Chief Financial Officer",
+		"Director of Finance",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in markdown, got:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "OfficerDirector") {
+		t.Fatalf("expected message shortcodes to be separated, got:\n%s", got)
+	}
+}
+
 func TestPreviewWordPressAddsMenuLinkedPagesFromHomepage(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/wp-json/", func(w http.ResponseWriter, r *http.Request) {
