@@ -168,6 +168,17 @@ func TestHTMLToMarkdownScrubsBuilderShortcodes(t *testing.T) {
 	}
 }
 
+func TestHTMLToTextScrubsBuilderShortcodes(t *testing.T) {
+	got := HTMLToText(`<p>[vc_row][vc_column][vc_column_text]Preparing for an interview is essential because it significantly increases your chances of success.[/vc_column_text][/vc_column][/vc_row]</p>`)
+	if strings.Contains(got, "[vc_") || strings.Contains(got, "vc_column") {
+		t.Fatalf("expected builder shortcodes to be scrubbed, got %q", got)
+	}
+	want := "Preparing for an interview is essential because it significantly increases your chances of success."
+	if got != want {
+		t.Fatalf("unexpected text:\ngot  %q\nwant %q", got, want)
+	}
+}
+
 func TestHTMLToMarkdownKeepsLinkedImagesAndIconOnlyLinks(t *testing.T) {
 	base := mustURL(t, "https://example.com/")
 	got := HTMLToMarkdown(`<article>

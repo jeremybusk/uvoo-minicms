@@ -14,9 +14,9 @@ import (
 func HTMLToText(raw string) string {
 	doc, err := html.Parse(strings.NewReader(raw))
 	if err != nil {
-		return strings.Join(strings.Fields(raw), " ")
+		return strings.Join(strings.Fields(scrubBuilderShortcodes(raw)), " ")
 	}
-	return strings.Join(strings.Fields(nodeText(doc)), " ")
+	return strings.Join(strings.Fields(scrubBuilderShortcodes(nodeText(doc))), " ")
 }
 
 func HTMLToMarkdown(raw string, base *url.URL) string {
