@@ -66,6 +66,7 @@ export type ImportOptions = {
   publish:boolean
   update_existing:boolean
   download_images:boolean
+  advanced_scraping:boolean
 }
 export type ImportResult = {
   source:string

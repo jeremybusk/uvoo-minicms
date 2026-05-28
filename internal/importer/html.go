@@ -2,6 +2,7 @@ package importer
 
 import (
 	"bytes"
+	"fmt"
 	stdhtml "html"
 	"net/url"
 	"regexp"
@@ -136,7 +137,15 @@ func renderNode(b *strings.Builder, n *html.Node, base *url.URL, depth int) {
 	case "a":
 		label := strings.TrimSpace(nodeText(n))
 		href := absoluteURL(base, attr(n, "href"))
+		if label == "" && hasDescendantImage(n) {
+			renderChildren(b, n, base, depth)
+			return
+		}
 		if label == "" {
+			label = strings.TrimSpace(firstNonEmpty(attr(n, "aria-label"), attr(n, "title")))
+		}
+		if label == "" {
+			renderChildren(b, n, base, depth)
 			return
 		}
 		if href == "" || strings.HasPrefix(href, "#") {
@@ -152,7 +161,7 @@ func renderNode(b *strings.Builder, n *html.Node, base *url.URL, depth int) {
 		b.WriteString(markdownURL(href))
 		b.WriteString(")")
 	case "img":
-		src := absoluteURL(base, attr(n, "src"))
+		src := imageNodeURL(n, base)
 		if src == "" || isDecorativeImage(n, src) {
 			return
 		}
@@ -395,6 +404,47 @@ func attr(n *html.Node, key string) string {
 		}
 	}
 	return ""
+}
+
+func imageNodeURL(n *html.Node, base *url.URL) string {
+	for _, key := range []string{"src", "data-src", "data-lazy-src", "data-original"} {
+		if src := absoluteURL(base, attr(n, key)); src != "" && !strings.HasPrefix(src, "data:") {
+			return src
+		}
+	}
+	return absoluteURL(base, bestSrcsetURL(attr(n, "srcset")))
+}
+
+func hasDescendantImage(n *html.Node) bool {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode && c.Data == "img" {
+			return true
+		}
+		if hasDescendantImage(c) {
+			return true
+		}
+	}
+	return false
+}
+
+func bestSrcsetURL(raw string) string {
+	var bestURL string
+	var bestWidth int
+	for _, candidate := range strings.Split(raw, ",") {
+		fields := strings.Fields(strings.TrimSpace(candidate))
+		if len(fields) == 0 {
+			continue
+		}
+		width := 1
+		if len(fields) > 1 && strings.HasSuffix(fields[1], "w") {
+			fmt.Sscanf(strings.TrimSuffix(fields[1], "w"), "%d", &width)
+		}
+		if bestURL == "" || width > bestWidth {
+			bestURL = fields[0]
+			bestWidth = width
+		}
+	}
+	return bestURL
 }
 
 func shouldSkipElement(n *html.Node) bool {

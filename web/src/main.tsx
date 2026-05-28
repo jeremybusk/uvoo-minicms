@@ -90,6 +90,7 @@ function Root() {
   const [importPublish, setImportPublish] = useState(true)
   const [importUpdateExisting, setImportUpdateExisting] = useState(false)
   const [importDownloadImages, setImportDownloadImages] = useState(true)
+  const [importAdvancedScraping, setImportAdvancedScraping] = useState(false)
   const [importPreview, setImportPreview] = useState<ImportResult | null>(null)
   const [previewingImport, setPreviewingImport] = useState(false)
   const [runningImport, setRunningImport] = useState(false)
@@ -273,7 +274,8 @@ function Root() {
       import_menu: importMenu,
       publish: importPublish,
       update_existing: importUpdateExisting,
-      download_images: importDownloadImages
+      download_images: importDownloadImages,
+      advanced_scraping: importAdvancedScraping
     }
   }
   async function previewImportSite() {
@@ -562,6 +564,7 @@ function Root() {
               <Form.Item label="Publish" valuePropName="checked"><Switch checked={importPublish} onChange={setImportPublish} /></Form.Item>
               <Form.Item label="Update existing" valuePropName="checked"><Switch checked={importUpdateExisting} onChange={setImportUpdateExisting} /></Form.Item>
               <Form.Item label="Download images" valuePropName="checked"><Switch checked={importDownloadImages} onChange={setImportDownloadImages} /></Form.Item>
+              <Form.Item label="Advanced scraping" valuePropName="checked"><Switch checked={importAdvancedScraping} onChange={setImportAdvancedScraping} /></Form.Item>
             </Space>
           </Form>
           {importPreview && <div className="importPreview">

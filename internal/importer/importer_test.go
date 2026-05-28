@@ -168,6 +168,35 @@ func TestHTMLToMarkdownScrubsBuilderShortcodes(t *testing.T) {
 	}
 }
 
+func TestHTMLToMarkdownKeepsLinkedImagesAndIconOnlyLinks(t *testing.T) {
+	base := mustURL(t, "https://example.com/")
+	got := HTMLToMarkdown(`<article>
+<a href="/team/scott/"><img src="/uploads/scott.jpg" alt="Scott Driggs"></a>
+<h3><a href="/team/scott/">Scott Driggs</a></h3>
+<a href="https://www.linkedin.com/in/scottdriggs" title="LinkedIn" target="_blank"><span><i class="icon-linkedin"></i></span></a>
+</article>`, base)
+	for _, want := range []string{
+		"![Scott Driggs](https://example.com/uploads/scott.jpg)",
+		"### Scott Driggs",
+		"[LinkedIn](https://www.linkedin.com/in/scottdriggs)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in markdown, got:\n%s", want, got)
+		}
+	}
+}
+
+func TestSupplementalMediaMarkdownFindsBackgroundImages(t *testing.T) {
+	base := mustURL(t, "https://example.com/")
+	got := supplementalMediaMarkdown(`<div style="background-image:url('/uploads/hero.jpg')"></div><div style="background-image:url('/uploads/pattern.png')"></div>`, base, "")
+	if !strings.Contains(got, "![Hero.jpg](https://example.com/uploads/hero.jpg)") {
+		t.Fatalf("expected supplemental background image, got:\n%s", got)
+	}
+	if strings.Contains(got, "pattern.png") {
+		t.Fatalf("expected decorative pattern to be skipped, got:\n%s", got)
+	}
+}
+
 func TestPreviewWordPressAddsMenuLinkedPagesFromHomepage(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/wp-json/", func(w http.ResponseWriter, r *http.Request) {
