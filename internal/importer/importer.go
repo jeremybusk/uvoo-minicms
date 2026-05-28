@@ -26,7 +26,7 @@ import (
 	"uvoominicms/internal/db"
 )
 
-const defaultMaxPages = 50
+const defaultMaxPages = 100
 const defaultRequestTimeout = 6 * time.Second
 
 type Importer struct {
