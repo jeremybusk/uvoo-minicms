@@ -437,6 +437,7 @@ func importResultMap(result importer.Result) map[string]any {
 	for _, item := range result.Menu {
 		menu = append(menu, map[string]any{
 			"id":        item.ID,
+			"type":      item.Type,
 			"parent_id": item.ParentID,
 			"label":     item.Label,
 			"url":       item.URL,
@@ -580,6 +581,7 @@ func settingsMap(settings db.Settings) map[string]any {
 	for _, item := range settings.Menu {
 		menu = append(menu, map[string]any{
 			"id":        item.ID,
+			"type":      item.Type,
 			"parent_id": item.ParentID,
 			"label":     item.Label,
 			"url":       item.URL,
@@ -672,20 +674,32 @@ func navItems(v any) []db.NavItem {
 			continue
 		}
 		label := str(m, "label")
+		itemType := cleanNavItemType(str(m, "type"))
 		url := cleanURL(str(m, "url"))
-		if label == "" || url == "" {
+		if itemType == "section" {
+			url = ""
+		}
+		if label == "" || (itemType != "section" && url == "") {
 			continue
 		}
 		out = append(out, db.NavItem{
 			ID:       cleanID(str(m, "id")),
+			Type:     itemType,
 			ParentID: cleanID(str(m, "parent_id")),
 			Label:    label,
 			URL:      url,
-			External: boolean(m, "external") || strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://"),
+			External: itemType != "section" && (boolean(m, "external") || strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")),
 			Enabled:  boolean(m, "enabled"),
 		})
 	}
 	return out
+}
+
+func cleanNavItemType(s string) string {
+	if strings.EqualFold(strings.TrimSpace(s), "section") {
+		return "section"
+	}
+	return "link"
 }
 
 var slugRe = regexp.MustCompile(`[^a-z0-9-]+`)

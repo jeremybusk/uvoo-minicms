@@ -1,6 +1,11 @@
 package web
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"uvoominicms/internal/db"
+)
 
 func TestYouTubeID(t *testing.T) {
 	tests := map[string]string{
@@ -30,5 +35,34 @@ func TestVimeoID(t *testing.T) {
 		if got := vimeoID(input); got != want {
 			t.Fatalf("vimeoID(%q)=%q, want %q", input, got, want)
 		}
+	}
+}
+
+func TestRenderMenuSupportsSectionParents(t *testing.T) {
+	html := string(renderMenu([]db.NavItem{
+		{ID: "resources", Type: "section", Label: "Resources", Enabled: true},
+		{ID: "blog", Type: "link", ParentID: "resources", Label: "Blog", URL: "/blog", Enabled: true},
+	}))
+	if !strings.Contains(html, `<button class="navSection"`) {
+		t.Fatalf("expected section parent button, got %s", html)
+	}
+	if strings.Contains(html, `href=""`) {
+		t.Fatalf("section parent should not render an empty link, got %s", html)
+	}
+	if !strings.Contains(html, `aria-expanded="false"`) || !strings.Contains(html, `▾`) {
+		t.Fatalf("expected accessible chevron disclosure, got %s", html)
+	}
+}
+
+func TestRenderMenuKeepsLinkParentClickable(t *testing.T) {
+	html := string(renderMenu([]db.NavItem{
+		{ID: "services", Type: "link", Label: "Services", URL: "/services", Enabled: true},
+		{ID: "support", Type: "link", ParentID: "services", Label: "Support", URL: "/services/support", Enabled: true},
+	}))
+	if !strings.Contains(html, `<a href="/services"`) {
+		t.Fatalf("expected parent link to remain clickable, got %s", html)
+	}
+	if !strings.Contains(html, `class="navToggle"`) {
+		t.Fatalf("expected separate submenu toggle, got %s", html)
 	}
 }

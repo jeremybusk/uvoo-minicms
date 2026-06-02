@@ -358,15 +358,28 @@ func renderMenu(items []db.NavItem) template.HTML {
 func writeMenu(b *strings.Builder, children map[string][]db.NavItem, parentID string) {
 	for _, item := range children[parentID] {
 		kids := children[item.ID]
+		label := template.HTMLEscapeString(item.Label)
+		subnavID := template.HTMLEscapeString("nav-sub-" + item.ID)
 		if len(kids) > 0 {
-			label := template.HTMLEscapeString(item.Label)
-			fmt.Fprintf(b, `<div class="navGroup"><div class="navParent"><a href="%s"%s>%s</a><button class="navToggle" type="button" aria-label="Toggle %s submenu" aria-expanded="false" onclick="var g=this.closest('.navGroup');var o=g.classList.toggle('open');this.setAttribute('aria-expanded',o?'true':'false');this.textContent=o?'-':'+'">+</button></div><div class="subnav">`, template.HTMLEscapeString(item.URL), externalAttrs(item.External), label, label)
+			if item.Type == "section" {
+				fmt.Fprintf(b, `<div class="navGroup"><button class="navSection" type="button" aria-expanded="false" aria-controls="%s" style="display:flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--ink);padding:8px 11px;border-radius:var(--radius-pill);cursor:pointer;font:inherit;font-weight:600" onclick="%s"><span>%s</span><span class="navChevron" aria-hidden="true">▾</span></button><div class="subnav" id="%s">`, subnavID, navToggleJS(), label, subnavID)
+			} else {
+				fmt.Fprintf(b, `<div class="navGroup"><div class="navParent"><a href="%s"%s>%s</a><button class="navToggle" type="button" aria-label="Toggle %s submenu" aria-expanded="false" aria-controls="%s" style="display:grid" onclick="%s">▾</button></div><div class="subnav" id="%s">`, template.HTMLEscapeString(item.URL), externalAttrs(item.External), label, label, subnavID, navToggleJS(), subnavID)
+			}
 			writeMenu(b, children, item.ID)
 			b.WriteString(`</div></div>`)
 			continue
 		}
+		if item.Type == "section" {
+			fmt.Fprintf(b, `<span class="navSectionLabel" style="color:var(--muted);padding:8px 11px;font-weight:700">%s</span>`, label)
+			continue
+		}
 		fmt.Fprintf(b, `<a href="%s"%s>%s</a>`, template.HTMLEscapeString(item.URL), externalAttrs(item.External), template.HTMLEscapeString(item.Label))
 	}
+}
+
+func navToggleJS() string {
+	return `var g=this.closest('.navGroup');var s=g.querySelector('.subnav');var o=g.classList.toggle('open');this.setAttribute('aria-expanded',o?'true':'false');if(s){s.style.display=o?'flex':'';s.style.flexDirection='column'}var c=this.querySelector('.navChevron');if(c){c.textContent=o?'▴':'▾'}else{this.textContent=o?'▴':'▾'}`
 }
 
 func externalAttrs(external bool) string {

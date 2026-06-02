@@ -11,7 +11,7 @@ export type Page = {
   created_at:string
   updated_at:string
 }
-export type NavItem = { id:string; parent_id:string; label:string; url:string; external:boolean; enabled:boolean }
+export type NavItem = { id:string; type?:'link'|'section'; parent_id:string; label:string; url:string; external:boolean; enabled:boolean }
 export type Asset = { id:number; name:string; url:string; size:number; created_at:string }
 export type ACLRule = { id?:number; scope:'all'|'admin'|'public'; action:'allow'|'deny'; cidr:string; note:string; enabled:boolean }
 export type ACLSettings = {
