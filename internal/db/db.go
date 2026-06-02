@@ -59,6 +59,7 @@ type ACLRule struct {
 
 type NavItem struct {
 	ID       string `json:"id"`
+	Type     string `json:"type,omitempty"`
 	ParentID string `json:"parent_id"`
 	Label    string `json:"label"`
 	URL      string `json:"url"`
@@ -573,7 +574,7 @@ func DefaultSettings(siteName string) Settings {
 		SearchEnabled:        true,
 		NavLayout:            "top",
 		Menu: []NavItem{
-			{ID: "home", Label: "Home", URL: "/", External: false, Enabled: true},
+			{ID: "home", Type: "link", Label: "Home", URL: "/", External: false, Enabled: true},
 		},
 	}
 }
@@ -582,6 +583,13 @@ func normalizeSettings(settings *Settings) {
 	for i := range settings.Menu {
 		if settings.Menu[i].ID == "" {
 			settings.Menu[i].ID = fmt.Sprintf("item-%d", i+1)
+		}
+		if settings.Menu[i].Type != "section" {
+			settings.Menu[i].Type = "link"
+		}
+		if settings.Menu[i].Type == "section" {
+			settings.Menu[i].URL = ""
+			settings.Menu[i].External = false
 		}
 	}
 }

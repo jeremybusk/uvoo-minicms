@@ -219,7 +219,18 @@ function Root() {
     setSavingSettings(true)
     try {
       const values = { ...settingsForm.getFieldsValue(true), ...overrides }
-      const menu = ((values.menu || []) as NavItem[]).map(item => ({ ...item, id: item.id || newID(), parent_id: item.parent_id || '', url: pathify(item.url || ''), enabled: item.enabled !== false })).filter(item => item.label && item.url)
+      const menu = ((values.menu || []) as NavItem[]).map(item => {
+        const itemType = item.type === 'section' ? 'section' : 'link'
+        return {
+          ...item,
+          id: item.id || newID(),
+          type: itemType,
+          parent_id: item.parent_id || '',
+          url: itemType === 'section' ? '' : pathify(item.url || ''),
+          external: itemType === 'section' ? false : item.external,
+          enabled: item.enabled !== false
+        }
+      }).filter(item => item.label && (item.type === 'section' || item.url))
       const r = await api.saveSettings({
         ...values,
         default_theme: values.default_theme || publicTheme,
@@ -537,7 +548,7 @@ function Root() {
           <MediaBrowser assets={assets} loading={loadingAssets} onInsert={insertAsset} onDelete={confirmDeleteAsset} onRefresh={() => loadAssets().catch((e:any) => message.error(e.message))} uploadProps={mediaUploadProps} />
         </Card> },
         { key:'site', label:'Site', children:<Card className="editorCard">
-          <Form form={settingsForm} layout="vertical" onFinish={() => saveSettings()} initialValues={{site_name:'UvooMiniCMS', default_theme:'light', public_theme_style:'soft', public_primary_color:'#386bc0', public_secondary_color:'#64748b', public_header_style:'neutral', admin_theme:'light', theme_style:'soft', admin_primary_color:'#386bc0', admin_secondary_color:'#64748b', admin_palette:'slate', nav_layout:'top', footer_markdown:'', logo_enabled:true, favicon_enabled:true, menu_enabled:true, footer_enabled:true, theme_toggle_enabled:true, icons_enabled:true, search_enabled:true, menu:[{id:'home', parent_id:'', label:'Home', url:'/', external:false, enabled:true}]}}>
+          <Form form={settingsForm} layout="vertical" onFinish={() => saveSettings()} initialValues={{site_name:'UvooMiniCMS', default_theme:'light', public_theme_style:'soft', public_primary_color:'#386bc0', public_secondary_color:'#64748b', public_header_style:'neutral', admin_theme:'light', theme_style:'soft', admin_primary_color:'#386bc0', admin_secondary_color:'#64748b', admin_palette:'slate', nav_layout:'top', footer_markdown:'', logo_enabled:true, favicon_enabled:true, menu_enabled:true, footer_enabled:true, theme_toggle_enabled:true, icons_enabled:true, search_enabled:true, menu:[{id:'home', type:'link', parent_id:'', label:'Home', url:'/', external:false, enabled:true}]}}>
             <Space className="topbar" align="start">
               <div>
                 <Typography.Title level={3}>Site settings</Typography.Title>
@@ -586,14 +597,24 @@ function Root() {
             <Form.List name="menu">{(fields, { add, remove }) => <>
               {fields.map(field => <Space key={field.key} className="menuRow" align="start">
                 <Form.Item {...field} name={[field.name, 'id']} hidden><Input /></Form.Item>
+                <Form.Item {...field} name={[field.name, 'type']} label="Type"><Select options={[{label:'Link', value:'link'}, {label:'Section', value:'section'}]} /></Form.Item>
                 <Form.Item {...field} name={[field.name, 'label']} label="Label" rules={[{required:true}]}><Input placeholder="About" /></Form.Item>
-                <Form.Item {...field} name={[field.name, 'url']} label="URL" rules={[{required:true}]}><Input placeholder="/about or https://..." /></Form.Item>
+                <Form.Item noStyle shouldUpdate={(prev, cur) => prev.menu?.[field.name]?.type !== cur.menu?.[field.name]?.type}>
+                  {({ getFieldValue }) => {
+                    const itemType = getFieldValue(['menu', field.name, 'type']) === 'section' ? 'section' : 'link'
+                    return <Form.Item {...field} name={[field.name, 'url']} label="URL" rules={itemType === 'section' ? [] : [{required:true}]}>
+                      <Input disabled={itemType === 'section'} placeholder={itemType === 'section' ? 'Not used for sections' : '/about or https://...'} />
+                    </Form.Item>
+                  }}
+                </Form.Item>
                 <Form.Item {...field} name={[field.name, 'parent_id']} label="Parent"><Select allowClear placeholder="Top level" options={(menuItems || []).filter((item, i) => i !== field.name && item?.id).map(item => ({label: item.label || item.url || item.id, value: item.id}))} /></Form.Item>
-                <Form.Item {...field} name={[field.name, 'external']} label="External" valuePropName="checked"><Switch /></Form.Item>
+                <Form.Item noStyle shouldUpdate={(prev, cur) => prev.menu?.[field.name]?.type !== cur.menu?.[field.name]?.type}>
+                  {({ getFieldValue }) => <Form.Item {...field} name={[field.name, 'external']} label="External" valuePropName="checked"><Switch disabled={getFieldValue(['menu', field.name, 'type']) === 'section'} /></Form.Item>}
+                </Form.Item>
                 <Form.Item {...field} name={[field.name, 'enabled']} label="Enabled" valuePropName="checked"><Switch /></Form.Item>
                 <Button danger onClick={() => remove(field.name)}>Remove</Button>
               </Space>)}
-              <Button onClick={() => add({id:newID(), parent_id:'', label:'', url:'/', external:false, enabled:true})}>Add menu item</Button>
+              <Button onClick={() => add({id:newID(), type:'link', parent_id:'', label:'', url:'/', external:false, enabled:true})}>Add menu item</Button>
             </>}</Form.List>
           </Form>
         </Card> },

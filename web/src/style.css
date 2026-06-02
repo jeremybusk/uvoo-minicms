@@ -178,7 +178,7 @@ body,
 
 .menuRow {
   display: grid !important;
-  grid-template-columns: 1fr 1.3fr 1fr 90px 90px auto;
+  grid-template-columns: 120px 1fr 1.3fr 1fr 90px 90px auto;
   width: 100%;
   align-items: end;
   gap: 12px;
