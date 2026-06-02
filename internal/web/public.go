@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -156,6 +157,7 @@ func (p *Public) render(markdown string) (template.HTML, error) {
 func (p *Public) expandRichMarkdown(markdown string) (string, map[string]string) {
 	replacements := map[string]string{}
 	markdown = p.expandCards(markdown, replacements)
+	markdown = expandMediaEmbeds(markdown, replacements)
 	markdown = expandIcons(markdown, replacements)
 	return markdown, replacements
 }
@@ -163,6 +165,9 @@ func (p *Public) expandRichMarkdown(markdown string) (string, map[string]string)
 var cardStartRe = regexp.MustCompile(`^:::card(?:\s+(.*))?$`)
 var attrRe = regexp.MustCompile(`([a-zA-Z_]+)="([^"]*)"`)
 var iconRe = regexp.MustCompile(`\{\{icon:([a-zA-Z0-9 -]+)\}\}`)
+var mediaEmbedRe = regexp.MustCompile(`\{\{(youtube|vimeo):([^}]+)\}\}`)
+var youtubeIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
+var vimeoIDRe = regexp.MustCompile(`^[0-9]{6,12}$`)
 
 func (p *Public) expandCards(markdown string, replacements map[string]string) string {
 	lines := strings.Split(markdown, "\n")
@@ -194,6 +199,22 @@ func expandIcons(markdown string, replacements map[string]string) string {
 		name := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(match, "{{icon:"), "}}"))
 		token := fmt.Sprintf("UVOOMINICMS_ICON_%d", len(replacements))
 		replacements[token] = renderIcon(name)
+		return token
+	})
+}
+
+func expandMediaEmbeds(markdown string, replacements map[string]string) string {
+	return mediaEmbedRe.ReplaceAllStringFunc(markdown, func(match string) string {
+		parts := mediaEmbedRe.FindStringSubmatch(match)
+		if len(parts) != 3 {
+			return match
+		}
+		html := renderMediaEmbed(strings.ToLower(parts[1]), strings.TrimSpace(parts[2]))
+		if html == "" {
+			return ""
+		}
+		token := fmt.Sprintf("UVOOMINICMS_MEDIA_%d", len(replacements))
+		replacements[token] = html
 		return token
 	})
 }
@@ -247,6 +268,79 @@ func sanitizeIconClass(name string) string {
 		return strings.Join(strings.Fields(name), " ")
 	}
 	return "fa-solid fa-" + strings.ReplaceAll(name, " ", "-")
+}
+
+func renderMediaEmbed(provider, raw string) string {
+	var src, title string
+	switch provider {
+	case "youtube":
+		id := youtubeID(raw)
+		if id == "" {
+			return ""
+		}
+		src = "https://www.youtube-nocookie.com/embed/" + id
+		title = "YouTube video"
+	case "vimeo":
+		id := vimeoID(raw)
+		if id == "" {
+			return ""
+		}
+		src = "https://player.vimeo.com/video/" + id
+		title = "Vimeo video"
+	default:
+		return ""
+	}
+	return `<div class="cms-embed" style="position:relative;aspect-ratio:16/9;margin:24px 0;background:#020617;border-radius:var(--radius-sm);overflow:hidden;box-shadow:0 14px 34px var(--shadow)"><iframe src="` + template.HTMLEscapeString(src) + `" title="` + title + `" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`
+}
+
+func youtubeID(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if youtubeIDRe.MatchString(raw) {
+		return raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	host := strings.ToLower(strings.TrimPrefix(u.Hostname(), "www."))
+	switch host {
+	case "youtube.com", "m.youtube.com", "music.youtube.com":
+		if id := u.Query().Get("v"); youtubeIDRe.MatchString(id) {
+			return id
+		}
+		parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+		if len(parts) >= 2 && (parts[0] == "embed" || parts[0] == "shorts") && youtubeIDRe.MatchString(parts[1]) {
+			return parts[1]
+		}
+	case "youtu.be":
+		id := strings.Trim(strings.TrimPrefix(u.Path, "/"), "/")
+		if youtubeIDRe.MatchString(id) {
+			return id
+		}
+	}
+	return ""
+}
+
+func vimeoID(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if vimeoIDRe.MatchString(raw) {
+		return raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	host := strings.ToLower(strings.TrimPrefix(u.Hostname(), "www."))
+	if host != "vimeo.com" && host != "player.vimeo.com" {
+		return ""
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	for i := len(parts) - 1; i >= 0; i-- {
+		if vimeoIDRe.MatchString(parts[i]) {
+			return parts[i]
+		}
+	}
+	return ""
 }
 
 func renderMenu(items []db.NavItem) template.HTML {
