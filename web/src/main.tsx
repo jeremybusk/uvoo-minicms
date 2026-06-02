@@ -33,6 +33,24 @@ function defaultFooter(siteName = 'UvooMiniCMS') {
 function newID() {
   return globalThis.crypto?.randomUUID?.() || `item-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
+function isMenuDescendant(items: NavItem[], itemID: string, ancestorID: string) {
+  const byID = new Map(items.filter(item => item?.id).map(item => [item.id, item]))
+  const seen = new Set<string>()
+  let parentID = byID.get(itemID)?.parent_id || ''
+  while (parentID) {
+    if (parentID === ancestorID) return true
+    if (seen.has(parentID)) return false
+    seen.add(parentID)
+    parentID = byID.get(parentID)?.parent_id || ''
+  }
+  return false
+}
+function menuParentOptions(items: NavItem[], rowIndex: number) {
+  const currentID = items[rowIndex]?.id || ''
+  return items
+    .filter((item, i) => i !== rowIndex && item?.id && (!currentID || !isMenuDescendant(items, item.id, currentID)))
+    .map(item => ({ label: item.label || item.url || item.id, value: item.id }))
+}
 function hexToRgb(hex:string) {
   const cleaned = hex.replace('#', '')
   const value = /^[0-9a-fA-F]{6}$/.test(cleaned) ? cleaned : '386bc0'
@@ -610,7 +628,7 @@ function Root() {
                     </Form.Item>
                   }}
                 </Form.Item>
-                <Form.Item {...field} name={[field.name, 'parent_id']} label="Parent"><Select allowClear placeholder="Top level" options={(menuItems || []).filter((item, i) => i !== field.name && item?.id).map(item => ({label: item.label || item.url || item.id, value: item.id}))} /></Form.Item>
+                <Form.Item {...field} name={[field.name, 'parent_id']} label="Parent"><Select allowClear placeholder="Top level" options={menuParentOptions(menuItems || [], field.name)} /></Form.Item>
                 <Form.Item noStyle shouldUpdate={(prev, cur) => prev.menu?.[field.name]?.type !== cur.menu?.[field.name]?.type}>
                   {({ getFieldValue }) => <Form.Item {...field} name={[field.name, 'external']} label="External" valuePropName="checked"><Switch disabled={getFieldValue(['menu', field.name, 'type']) === 'section'} /></Form.Item>}
                 </Form.Item>

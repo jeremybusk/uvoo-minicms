@@ -89,8 +89,11 @@ func TestNavMenuStyleOwnsNavigationBehavior(t *testing.T) {
 	if !strings.Contains(assets, `document.addEventListener('click'`) || !strings.Contains(assets, `.navToggle,.navSection`) {
 		t.Fatalf("expected one delegated nav click handler, got %s", assets)
 	}
-	if !strings.Contains(assets, `g.parentElement.children`) || !strings.Contains(assets, `resetToggle(s)`) {
+	if !strings.Contains(assets, `g.parentElement.children`) || !strings.Contains(assets, `closeGroup(s)`) {
 		t.Fatalf("expected opening one submenu to close sibling submenus, got %s", assets)
+	}
+	if !strings.Contains(assets, `closeAll()`) || !strings.Contains(assets, `e.key==='Escape'`) {
+		t.Fatalf("expected outside-click and Escape cleanup for open submenus, got %s", assets)
 	}
 	if !strings.Contains(assets, `a[aria-current=page]`) {
 		t.Fatalf("expected active page styling, got %s", assets)
