@@ -44,7 +44,7 @@ func TestRenderMenuSupportsSectionParents(t *testing.T) {
 	html := string(renderMenu([]db.NavItem{
 		{ID: "resources", Type: "section", Label: "Resources", Enabled: true},
 		{ID: "blog", Type: "link", ParentID: "resources", Label: "Blog", URL: "/blog", Enabled: true},
-	}))
+	}, ""))
 	if !strings.Contains(html, `<button class="navSection"`) {
 		t.Fatalf("expected section parent button, got %s", html)
 	}
@@ -60,7 +60,7 @@ func TestRenderMenuKeepsLinkParentClickable(t *testing.T) {
 	html := string(renderMenu([]db.NavItem{
 		{ID: "services", Type: "link", Label: "Services", URL: "/services", Enabled: true},
 		{ID: "support", Type: "link", ParentID: "services", Label: "Support", URL: "/services/support", Enabled: true},
-	}))
+	}, ""))
 	if !strings.Contains(html, `<a href="/services"`) {
 		t.Fatalf("expected parent link to remain clickable, got %s", html)
 	}
@@ -89,13 +89,33 @@ func TestNavMenuStyleOwnsNavigationBehavior(t *testing.T) {
 	if !strings.Contains(assets, `document.addEventListener('click'`) || !strings.Contains(assets, `.navToggle,.navSection`) {
 		t.Fatalf("expected one delegated nav click handler, got %s", assets)
 	}
+	if !strings.Contains(assets, `g.parentElement.children`) || !strings.Contains(assets, `resetToggle(s)`) {
+		t.Fatalf("expected opening one submenu to close sibling submenus, got %s", assets)
+	}
+	if !strings.Contains(assets, `a[aria-current=page]`) {
+		t.Fatalf("expected active page styling, got %s", assets)
+	}
+}
+
+func TestRenderMenuMarksActivePage(t *testing.T) {
+	html := string(renderMenu([]db.NavItem{
+		{ID: "home", Type: "link", Label: "Home", URL: "/", Enabled: true},
+		{ID: "support", Type: "link", Label: "Support", URL: "/support/", Enabled: true},
+		{ID: "external", Type: "link", Label: "External", URL: "https://example.com/support", External: true, Enabled: true},
+	}, "/support"))
+	if !strings.Contains(html, `<a href="/support/" aria-current="page">Support</a>`) {
+		t.Fatalf("expected current page marker on matching internal link, got %s", html)
+	}
+	if strings.Contains(html, `https://example.com/support" target="_blank" rel="noopener noreferrer" aria-current`) {
+		t.Fatalf("external links should not be marked active, got %s", html)
+	}
 }
 
 func TestPublicTemplateSideNavDoesNotRenderHiddenTopMenu(t *testing.T) {
 	menu := renderMenu([]db.NavItem{
 		{ID: "services", Type: "section", Label: "Services", Enabled: true},
 		{ID: "support", Type: "link", ParentID: "services", Label: "Support", URL: "/support", Enabled: true},
-	})
+	}, "/support")
 	var b bytes.Buffer
 	err := publicTpl.Execute(&b, map[string]any{
 		"SiteName":     "Test",

@@ -598,7 +598,10 @@ function Root() {
               {fields.map(field => <Space key={field.key} className="menuRow" align="start">
                 <Form.Item {...field} name={[field.name, 'id']} hidden><Input /></Form.Item>
                 <Form.Item {...field} name={[field.name, 'type']} label="Type"><Select options={[{label:'Link', value:'link'}, {label:'Section', value:'section'}]} /></Form.Item>
-                <Form.Item {...field} name={[field.name, 'label']} label="Label" rules={[{required:true}]}><Input placeholder="About" /></Form.Item>
+                <div>
+                  <Form.Item {...field} name={[field.name, 'label']} label="Label" rules={[{required:true}]}><Input placeholder="About" /></Form.Item>
+                  {menuItems?.[field.name]?.type === 'section' && !(menuItems || []).some((item, i) => i !== field.name && item?.parent_id === menuItems[field.name]?.id) && <Typography.Text type="warning">Section has no child items.</Typography.Text>}
+                </div>
                 <Form.Item noStyle shouldUpdate={(prev, cur) => prev.menu?.[field.name]?.type !== cur.menu?.[field.name]?.type}>
                   {({ getFieldValue }) => {
                     const itemType = getFieldValue(['menu', field.name, 'type']) === 'section' ? 'section' : 'link'

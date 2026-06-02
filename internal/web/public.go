@@ -71,7 +71,7 @@ func (p *Public) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"MetaDescription":      page.MetaDescription,
 		"Body":                 body,
 		"Footer":               footer,
-		"MenuHTML":             renderMenu(settings.Menu),
+		"MenuHTML":             renderMenu(settings.Menu, routePath),
 		"NavMenuStyle":         template.HTML(navMenuStyle()),
 		"SearchHTML":           "",
 		"LogoURL":              settings.LogoURL,
@@ -120,7 +120,7 @@ func (p *Public) serveSearch(w http.ResponseWriter, r *http.Request, settings db
 		"Title":                "Search",
 		"Body":                 template.HTML(b.String()),
 		"Footer":               template.HTML(""),
-		"MenuHTML":             renderMenu(settings.Menu),
+		"MenuHTML":             renderMenu(settings.Menu, "/search"),
 		"NavMenuStyle":         template.HTML(navMenuStyle()),
 		"LogoURL":              settings.LogoURL,
 		"FaviconURL":           settings.FaviconURL,
@@ -345,7 +345,7 @@ func vimeoID(raw string) string {
 	return ""
 }
 
-func renderMenu(items []db.NavItem) template.HTML {
+func renderMenu(items []db.NavItem, currentPath string) template.HTML {
 	children := map[string][]db.NavItem{}
 	for _, item := range items {
 		if item.Enabled {
@@ -353,11 +353,11 @@ func renderMenu(items []db.NavItem) template.HTML {
 		}
 	}
 	var b strings.Builder
-	writeMenu(&b, children, "")
+	writeMenu(&b, children, "", currentPath)
 	return template.HTML(b.String())
 }
 
-func writeMenu(b *strings.Builder, children map[string][]db.NavItem, parentID string) {
+func writeMenu(b *strings.Builder, children map[string][]db.NavItem, parentID, currentPath string) {
 	for _, item := range children[parentID] {
 		kids := children[item.ID]
 		label := template.HTMLEscapeString(item.Label)
@@ -366,9 +366,9 @@ func writeMenu(b *strings.Builder, children map[string][]db.NavItem, parentID st
 			if item.Type == "section" {
 				fmt.Fprintf(b, `<div class="navGroup"><button class="navSection" type="button" aria-expanded="false" aria-controls="%s" style="display:flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--ink);padding:8px 11px;border-radius:var(--radius-pill);cursor:pointer;font:inherit;font-weight:600"><span>%s</span><span class="navChevron" aria-hidden="true">▾</span></button><div class="subnav" id="%s">`, subnavID, label, subnavID)
 			} else {
-				fmt.Fprintf(b, `<div class="navGroup"><div class="navParent"><a href="%s"%s>%s</a><button class="navToggle" type="button" aria-label="Toggle %s submenu" aria-expanded="false" aria-controls="%s">▾</button></div><div class="subnav" id="%s">`, template.HTMLEscapeString(item.URL), externalAttrs(item.External), label, label, subnavID, subnavID)
+				fmt.Fprintf(b, `<div class="navGroup"><div class="navParent"><a href="%s"%s%s>%s</a><button class="navToggle" type="button" aria-label="Toggle %s submenu" aria-expanded="false" aria-controls="%s">▾</button></div><div class="subnav" id="%s">`, template.HTMLEscapeString(item.URL), externalAttrs(item.External), activeAttrs(item, currentPath), label, label, subnavID, subnavID)
 			}
-			writeMenu(b, children, item.ID)
+			writeMenu(b, children, item.ID, currentPath)
 			b.WriteString(`</div></div>`)
 			continue
 		}
@@ -376,12 +376,34 @@ func writeMenu(b *strings.Builder, children map[string][]db.NavItem, parentID st
 			fmt.Fprintf(b, `<span class="navSectionLabel" style="color:var(--muted);padding:8px 11px;font-weight:700">%s</span>`, label)
 			continue
 		}
-		fmt.Fprintf(b, `<a href="%s"%s>%s</a>`, template.HTMLEscapeString(item.URL), externalAttrs(item.External), template.HTMLEscapeString(item.Label))
+		fmt.Fprintf(b, `<a href="%s"%s%s>%s</a>`, template.HTMLEscapeString(item.URL), externalAttrs(item.External), activeAttrs(item, currentPath), template.HTMLEscapeString(item.Label))
 	}
 }
 
 func navMenuStyle() string {
-	return `<style>.nav .navToggle{display:none!important}.nav .navChevron{display:none}.nav .navSection:hover,.nav .navSection:focus{background:var(--soft);outline:0}.drawerNav .navToggle{display:grid!important}.drawerNav .navChevron{display:inline}.drawerNav .navSection{width:100%;justify-content:space-between;border-radius:var(--radius-sm)!important;padding:10px 12px!important}.drawerNav .navSection:hover,.drawerNav .navSection:focus{background:var(--soft);outline:0}.drawerNav .navGroup:hover>.subnav,.drawerNav .navGroup:focus-within>.subnav{display:none}.drawerNav .navGroup.open>.subnav,.drawerNav .navGroup.open:hover>.subnav,.drawerNav .navGroup.open:focus-within>.subnav{display:flex;flex-direction:column}.siteSide .drawerBtn{order:-2;display:inline-grid!important}.siteSide .brand{margin-right:auto}@media(max-width:720px){.nav .navToggle{display:grid!important}.nav .navChevron{display:inline}.nav .navSection{width:100%;justify-content:space-between;padding:11px 12px!important;border-radius:var(--radius-sm)!important}.nav .navSectionLabel{padding:11px 12px!important}.nav .navGroup:hover>.subnav,.nav .navGroup:focus-within>.subnav{display:none}.nav .navGroup.open>.subnav,.nav .navGroup.open:hover>.subnav,.nav .navGroup.open:focus-within>.subnav{display:flex;flex-direction:column}}</style><script>(function(){document.addEventListener('click',function(e){var t=e.target.closest&&e.target.closest('.navToggle,.navSection');if(!t){return}var g=t.closest('.navGroup');if(!g){return}var o=g.classList.toggle('open');t.setAttribute('aria-expanded',o?'true':'false');var c=t.querySelector('.navChevron');if(c){c.textContent=o?'▴':'▾'}else{t.textContent=o?'▴':'▾'}})})()</script>`
+	return `<style>.nav .navToggle{display:none!important}.nav .navChevron{display:none}.nav a[aria-current=page],.drawerNav a[aria-current=page]{background:color-mix(in srgb,var(--accent) 14%,var(--soft));color:var(--accent);font-weight:800}.nav .navSection:hover,.nav .navSection:focus{background:var(--soft);outline:0}.drawerNav .navToggle{display:grid!important}.drawerNav .navChevron{display:inline}.drawerNav .navSection{width:100%;justify-content:space-between;border-radius:var(--radius-sm)!important;padding:10px 12px!important}.drawerNav .navSection:hover,.drawerNav .navSection:focus{background:var(--soft);outline:0}.drawerNav .navGroup:hover>.subnav,.drawerNav .navGroup:focus-within>.subnav{display:none}.drawerNav .navGroup.open>.subnav,.drawerNav .navGroup.open:hover>.subnav,.drawerNav .navGroup.open:focus-within>.subnav{display:flex;flex-direction:column}.siteSide .drawerBtn{order:-2;display:inline-grid!important}.siteSide .brand{margin-right:auto}@media(max-width:720px){.nav .navToggle{display:grid!important}.nav .navChevron{display:inline}.nav .navSection{width:100%;justify-content:space-between;padding:11px 12px!important;border-radius:var(--radius-sm)!important}.nav .navSectionLabel{padding:11px 12px!important}.nav .navGroup:hover>.subnav,.nav .navGroup:focus-within>.subnav{display:none}.nav .navGroup.open>.subnav,.nav .navGroup.open:hover>.subnav,.nav .navGroup.open:focus-within>.subnav{display:flex;flex-direction:column}}</style><script>(function(){function resetToggle(g){var b=g.querySelector('.navSection,.navToggle');if(b){b.setAttribute('aria-expanded','false');var c=b.querySelector('.navChevron');if(c){c.textContent='▾'}else{b.textContent='▾'}}}document.addEventListener('click',function(e){var t=e.target.closest&&e.target.closest('.navToggle,.navSection');if(!t){return}var g=t.closest('.navGroup');if(!g){return}var open=!g.classList.contains('open');if(open&&g.parentElement){Array.prototype.forEach.call(g.parentElement.children,function(s){if(s!==g&&s.classList&&s.classList.contains('navGroup')){s.classList.remove('open');resetToggle(s)}})}g.classList.toggle('open',open);t.setAttribute('aria-expanded',open?'true':'false');var c=t.querySelector('.navChevron');if(c){c.textContent=open?'▴':'▾'}else{t.textContent=open?'▴':'▾'}})})()</script>`
+}
+
+func activeAttrs(item db.NavItem, currentPath string) string {
+	if item.Type == "section" || item.External || currentPath == "" {
+		return ""
+	}
+	u, err := url.Parse(item.URL)
+	if err != nil || u.IsAbs() {
+		return ""
+	}
+	if cleanNavPath(u.Path) == cleanNavPath(currentPath) {
+		return ` aria-current="page"`
+	}
+	return ""
+}
+
+func cleanNavPath(path string) string {
+	path = "/" + strings.Trim(path, "/")
+	if path != "/" {
+		path = strings.TrimSuffix(path, "/")
+	}
+	return path
 }
 
 func externalAttrs(external bool) string {
