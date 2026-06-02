@@ -84,6 +84,8 @@ The binary must be built for the same Linux libc family it will run on. Copying 
 
 For distro-style installs, this repo uses a small `nFPM` config. `nFPM` is also what GoReleaser uses for package generation, so this keeps manual packaging simple while leaving room to add GoReleaser later.
 
+See [docs/PACKAGING.md](docs/PACKAGING.md) for package versioning, dirty builds, and verification commands.
+
 Install `nfpm`, then run:
 
 ```bash
