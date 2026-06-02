@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"image"
 	"image/color"
 	"image/png"
@@ -111,6 +112,77 @@ func TestSetSiteImageOptimizesFromURLAndKeepsExternalSettingURL(t *testing.T) {
 	}
 }
 
+func TestSetSiteImagePreservesPNGTransparency(t *testing.T) {
+	store, err := db.Open(t.TempDir() + "/cms.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.DB.Close()
+	svc := &Service{Store: store, UploadDir: t.TempDir(), MaxUploadBytes: 2 << 20, SiteName: "Demo"}
+
+	callSetSiteImage(t, svc, "logo", "transparent-logo.png", transparentPNGDataURL(t, 1200, 300))
+	assets, err := store.ListAssets(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assets) != 1 {
+		t.Fatalf("expected 1 asset, got %d", len(assets))
+	}
+	if alpha := imageAlphaAt(t, assets[0].Path, 0, 0); alpha != 0 {
+		t.Fatalf("logo transparent corner was flattened, alpha=%d", alpha)
+	}
+
+	callSetSiteImage(t, svc, "favicon", "transparent-favicon.png", transparentPNGDataURL(t, 128, 128))
+	assets, err = store.ListAssets(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assets) != 2 {
+		t.Fatalf("expected 2 assets, got %d", len(assets))
+	}
+	if alpha := imageAlphaAt(t, assets[0].Path, 0, 0); alpha != 0 {
+		t.Fatalf("favicon transparent corner was flattened, alpha=%d", alpha)
+	}
+}
+
+func TestDeleteAssetRemovesFileAndClearsIdentitySetting(t *testing.T) {
+	store, err := db.Open(t.TempDir() + "/cms.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.DB.Close()
+	svc := &Service{Store: store, UploadDir: t.TempDir(), MaxUploadBytes: 2 << 20, SiteName: "Demo"}
+
+	callSetSiteImage(t, svc, "logo", "logo.png", pngDataURL(t, 120, 40))
+	assets, err := store.ListAssets(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assets) != 1 {
+		t.Fatalf("expected 1 asset, got %d", len(assets))
+	}
+	path := assets[0].Path
+
+	callDeleteAsset(t, svc, assets[0].ID)
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected uploaded file to be removed, stat err=%v", err)
+	}
+	settings, err := store.GetSettings(context.Background(), "Demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.LogoURL != "" || settings.LogoEnabled {
+		t.Fatalf("logo setting was not cleared after deleting asset: %#v", settings)
+	}
+	assets, err = store.ListAssets(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assets) != 0 {
+		t.Fatalf("expected asset row to be deleted, got %d", len(assets))
+	}
+}
+
 func callSetSiteImage(t *testing.T, svc *Service, kind, name, data string) {
 	t.Helper()
 	msg, err := structpb.NewStruct(map[string]any{
@@ -122,6 +194,17 @@ func callSetSiteImage(t *testing.T, svc *Service, kind, name, data string) {
 		t.Fatal(err)
 	}
 	if _, err := svc.SetSiteImage(context.Background(), connect.NewRequest(msg)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func callDeleteAsset(t *testing.T, svc *Service, id int64) {
+	t.Helper()
+	msg, err := structpb.NewStruct(map[string]any{"id": float64(id)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.DeleteAsset(context.Background(), connect.NewRequest(msg)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -160,6 +243,25 @@ func pngBytes(t *testing.T, w, h int) []byte {
 	return b.Bytes()
 }
 
+func transparentPNGDataURL(t *testing.T, w, h int) string {
+	t.Helper()
+	img := image.NewNRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			alpha := uint8(255)
+			if x < w/4 && y < h/4 {
+				alpha = 0
+			}
+			img.SetNRGBA(x, y, color.NRGBA{R: 20, G: 90, B: 180, A: alpha})
+		}
+	}
+	var b bytes.Buffer
+	if err := png.Encode(&b, img); err != nil {
+		t.Fatal(err)
+	}
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(b.Bytes())
+}
+
 func imageSize(t *testing.T, path string) (int, int) {
 	t.Helper()
 	f, err := os.Open(path)
@@ -172,4 +274,19 @@ func imageSize(t *testing.T, path string) (int, int) {
 		t.Fatal(err)
 	}
 	return cfg.Width, cfg.Height
+}
+
+func imageAlphaAt(t *testing.T, path string, x, y int) uint32 {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	img, _, err := image.Decode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, _, alpha := img.At(x, y).RGBA()
+	return alpha >> 8
 }

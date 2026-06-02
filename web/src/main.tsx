@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { App as AntApp, Button, Card, ConfigProvider, Form, Input, Layout, List, Modal, Popconfirm, Select, Space, Switch, Tabs, Typography, Upload, message, theme } from 'antd'
-import type { UploadProps } from 'antd'
+import { App as AntApp, Button, Card, ConfigProvider, Dropdown, Form, Input, Layout, List, Modal, Popconfirm, Select, Space, Switch, Tabs, Typography, Upload, message, theme } from 'antd'
+import type { MenuProps, UploadProps } from 'antd'
 import './style.css'
 import { api, ACLRule, ACLSettings, Asset, ImportOptions, ImportResult, NavItem, Page, SiteSettings } from './api'
 
@@ -332,6 +332,25 @@ function Root() {
     setMediaOpen(false)
     message.success('Asset inserted')
   }
+  async function deleteAsset(asset: Asset) {
+    try {
+      const r = await api.deleteAsset(asset.id)
+      setAssets(items => items.filter(item => item.id !== asset.id))
+      settingsForm.setFieldsValue(r.settings)
+      message.success('Media deleted')
+    } catch(e:any) {
+      message.error(e.message)
+    }
+  }
+  function confirmDeleteAsset(asset: Asset) {
+    Modal.confirm({
+      title: 'Delete media?',
+      content: asset.name,
+      okText: 'Delete',
+      okButtonProps: { danger: true },
+      onOk: () => deleteAsset(asset)
+    })
+  }
 
   const contentUploadProps: UploadProps = {
     showUploadList: false,
@@ -444,7 +463,7 @@ function Root() {
             </Form.Item>
           </Form>
           <Modal title="Browse uploads" open={mediaOpen} onCancel={() => setMediaOpen(false)} footer={null} width={920} className="mediaModal">
-            <MediaBrowser assets={assets} loading={loadingAssets} onInsert={insertAsset} onRefresh={() => loadAssets().catch((e:any) => message.error(e.message))} uploadProps={mediaUploadProps} />
+            <MediaBrowser assets={assets} loading={loadingAssets} onInsert={insertAsset} onDelete={confirmDeleteAsset} onRefresh={() => loadAssets().catch((e:any) => message.error(e.message))} uploadProps={mediaUploadProps} />
           </Modal>
         </Card> },
         { key:'media', label:'Media', children:<Card className="editorCard">
@@ -458,7 +477,7 @@ function Root() {
               <Button onClick={() => loadAssets().catch((e:any) => message.error(e.message))} loading={loadingAssets}>Refresh</Button>
             </Space>
           </Space>
-          <MediaBrowser assets={assets} loading={loadingAssets} onInsert={insertAsset} onRefresh={() => loadAssets().catch((e:any) => message.error(e.message))} uploadProps={mediaUploadProps} />
+          <MediaBrowser assets={assets} loading={loadingAssets} onInsert={insertAsset} onDelete={confirmDeleteAsset} onRefresh={() => loadAssets().catch((e:any) => message.error(e.message))} uploadProps={mediaUploadProps} />
         </Card> },
         { key:'site', label:'Site', children:<Card className="editorCard">
           <Form form={settingsForm} layout="vertical" onFinish={() => saveSettings()} initialValues={{site_name:'UvooMiniCMS', default_theme:'light', public_primary_color:'#386bc0', public_secondary_color:'#64748b', public_header_style:'neutral', admin_theme:'light', admin_primary_color:'#386bc0', admin_secondary_color:'#64748b', admin_palette:'slate', nav_layout:'top', footer_markdown:'', logo_enabled:true, favicon_enabled:true, menu_enabled:true, footer_enabled:true, theme_toggle_enabled:true, icons_enabled:true, search_enabled:true, menu:[{id:'home', parent_id:'', label:'Home', url:'/', external:false, enabled:true}]}}>
@@ -734,9 +753,26 @@ function Root() {
   </Layout></AntApp></ConfigProvider>
 }
 
-function MediaBrowser({ assets, loading, onInsert, onRefresh, uploadProps }: { assets: Asset[]; loading: boolean; onInsert: (asset: Asset) => void; onRefresh: () => void; uploadProps: UploadProps }) {
+function MediaBrowser({ assets, loading, onInsert, onDelete, onRefresh, uploadProps }: { assets: Asset[]; loading: boolean; onInsert: (asset: Asset) => void; onDelete: (asset: Asset) => void; onRefresh: () => void; uploadProps: UploadProps }) {
   const images = assets.filter(asset => isImage(asset.url))
   const files = assets.filter(asset => !isImage(asset.url))
+  const assetMenu = (asset: Asset): MenuProps => ({
+    items: [
+      { key: 'insert', label: isImage(asset.url) ? 'Insert' : 'Insert link' },
+      { key: 'view', label: 'View' },
+      { key: 'delete', label: 'Delete', danger: true }
+    ],
+    onClick: ({ key }) => {
+      if (key === 'insert') onInsert(asset)
+      if (key === 'view') window.open(asset.url, '_blank', 'noopener,noreferrer')
+      if (key === 'delete') onDelete(asset)
+    }
+  })
+  const actionButton = (asset: Asset) => (
+    <Dropdown trigger={['click']} menu={assetMenu(asset)}>
+      <Button size="small" aria-label={`Actions for ${asset.name}`}>...</Button>
+    </Dropdown>
+  )
   return <div>
     <Space wrap className="mediaActions">
       <Upload {...uploadProps}><Button>Upload file</Button></Upload>
@@ -750,13 +786,10 @@ function MediaBrowser({ assets, loading, onInsert, onRefresh, uploadProps }: { a
             <img src={asset.url} alt={asset.name} />
           </button>
           <Typography.Text ellipsis title={asset.name}>{asset.name}</Typography.Text>
-          <Space wrap>
-            <Button size="small" type="primary" onClick={() => onInsert(asset)}>Insert</Button>
-            <Button size="small" href={asset.url} target="_blank">View</Button>
-          </Space>
+          <div className="mediaTileActions">{actionButton(asset)}</div>
         </div>)}
       </div> : <div className="emptyMedia"><Typography.Text type="secondary">No uploaded images yet.</Typography.Text></div> },
-      { key:'files', label:`Files (${files.length})`, children: files.length ? <List className="mediaFileList" dataSource={files} renderItem={asset => <List.Item actions={[<Button size="small" type="primary" onClick={() => onInsert(asset)}>Insert link</Button>, <Button size="small" href={asset.url} target="_blank">View</Button>]}>
+      { key:'files', label:`Files (${files.length})`, children: files.length ? <List className="mediaFileList" dataSource={files} renderItem={asset => <List.Item actions={[actionButton(asset)]}>
         <List.Item.Meta title={asset.name} description={`${Math.round(asset.size / 1024)} KB · ${asset.url}`} />
       </List.Item>} /> : <div className="emptyMedia"><Typography.Text type="secondary">No uploaded files yet.</Typography.Text></div> }
     ]} />

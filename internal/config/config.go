@@ -13,6 +13,7 @@ type Config struct {
 	DataDir           string
 	DBPath            string
 	UploadDir         string
+	WebRoot           string
 	AdminUser         string
 	AdminPass         string
 	SessionTTL        time.Duration
@@ -35,6 +36,7 @@ func Load() Config {
 		DataDir:           data,
 		DBPath:            env("CMS_DB", data+"/cms.db"),
 		UploadDir:         env("CMS_UPLOAD_DIR", data+"/uploads"),
+		WebRoot:           env("CMS_WEB_ROOT", "web/dist"),
 		AdminUser:         env("CMS_ADMIN_USER", "admin"),
 		AdminPass:         env("CMS_ADMIN_PASS", "change-me"),
 		SessionTTL:        dur("CMS_SESSION_TTL", 12*time.Hour),
@@ -56,6 +58,7 @@ func Load() Config {
 	flag.StringVar(&cfg.Addr, "addr", cfg.Addr, "listen address")
 	flag.StringVar(&cfg.DBPath, "db", cfg.DBPath, "sqlite database path")
 	flag.StringVar(&cfg.UploadDir, "uploads", cfg.UploadDir, "upload directory")
+	flag.StringVar(&cfg.WebRoot, "web-root", cfg.WebRoot, "admin web asset directory")
 	flag.StringVar(&cfg.AdminUser, "admin-user", cfg.AdminUser, "admin username")
 	flag.StringVar(&cfg.AdminPass, "admin-pass", cfg.AdminPass, "admin password")
 	flag.StringVar(&allowCIDRs, "allow-cidrs", allowCIDRs, "comma-separated IPv4/IPv6 CIDR allow list")

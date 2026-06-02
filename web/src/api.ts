@@ -99,6 +99,7 @@ export const api = {
   saveSettings: (settings: SiteSettings) => rpc<{settings:SiteSettings}>('SaveSettings', settings),
   listAssets: () => rpc<{assets:Asset[]}>('ListAssets'),
   uploadFile: (name:string, data:string) => rpc<{asset:Asset}>('UploadFile', { name, data }),
+  deleteAsset: (id:number) => rpc<{ok:boolean, settings:SiteSettings}>('DeleteAsset', { id }),
   setSiteImage: (kind:'logo'|'favicon', name:string, data:string, url = '') => rpc<{asset:Asset, settings:SiteSettings}>('SetSiteImage', { kind, name, data, url }),
   getACL: () => rpc<{acl:ACLSettings}>('GetACL'),
   saveACL: (acl: ACLSettings) => rpc<{acl:ACLSettings}>('SaveACL', acl),
