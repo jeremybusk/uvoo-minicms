@@ -1,6 +1,8 @@
 package web
 
 import (
+	"bytes"
+	"html/template"
 	"strings"
 	"testing"
 
@@ -68,10 +70,53 @@ func TestRenderMenuKeepsLinkParentClickable(t *testing.T) {
 	if strings.Contains(html, `style="display:grid"`) {
 		t.Fatalf("desktop toggle visibility should be controlled by scoped CSS, got %s", html)
 	}
-	if !strings.Contains(html, `.nav .navToggle{display:none!important}`) {
-		t.Fatalf("expected top desktop nav toggles to be hidden by default, got %s", html)
+	if strings.Contains(html, `<style>`) {
+		t.Fatalf("menu markup should not include its own style block, got %s", html)
 	}
-	if !strings.Contains(html, `.drawerNav .navGroup:hover>.subnav,.drawerNav .navGroup:focus-within>.subnav{display:none}`) {
-		t.Fatalf("expected drawer hover/focus override so collapsed submenus stay closed, got %s", html)
+	if strings.Contains(html, `onclick=`) {
+		t.Fatalf("menu markup should use delegated event handling, got %s", html)
+	}
+}
+
+func TestNavMenuStyleOwnsNavigationBehavior(t *testing.T) {
+	assets := navMenuStyle()
+	if !strings.Contains(assets, `.nav .navToggle{display:none!important}`) {
+		t.Fatalf("expected top desktop nav toggles to be hidden by default, got %s", assets)
+	}
+	if !strings.Contains(assets, `.drawerNav .navGroup:hover>.subnav,.drawerNav .navGroup:focus-within>.subnav{display:none}`) {
+		t.Fatalf("expected drawer hover/focus override so collapsed submenus stay closed, got %s", assets)
+	}
+	if !strings.Contains(assets, `document.addEventListener('click'`) || !strings.Contains(assets, `.navToggle,.navSection`) {
+		t.Fatalf("expected one delegated nav click handler, got %s", assets)
+	}
+}
+
+func TestPublicTemplateSideNavDoesNotRenderHiddenTopMenu(t *testing.T) {
+	menu := renderMenu([]db.NavItem{
+		{ID: "services", Type: "section", Label: "Services", Enabled: true},
+		{ID: "support", Type: "link", ParentID: "services", Label: "Support", URL: "/support", Enabled: true},
+	})
+	var b bytes.Buffer
+	err := publicTpl.Execute(&b, map[string]any{
+		"SiteName":     "Test",
+		"Title":        "Home",
+		"Body":         template.HTML("<p>Home</p>"),
+		"MenuHTML":     menu,
+		"NavMenuStyle": template.HTML(navMenuStyle()),
+		"MenuEnabled":  true,
+		"SideNav":      true,
+	})
+	if err != nil {
+		t.Fatalf("execute public template: %v", err)
+	}
+	html := b.String()
+	if !strings.Contains(html, `class="drawerNav"`) {
+		t.Fatalf("expected drawer nav, got %s", html)
+	}
+	if strings.Contains(html, `id="nav"`) {
+		t.Fatalf("side nav should not render hidden top nav, got %s", html)
+	}
+	if count := strings.Count(html, `id="nav-sub-services"`); count != 1 {
+		t.Fatalf("expected one submenu id in side nav mode, got %d in %s", count, html)
 	}
 }
