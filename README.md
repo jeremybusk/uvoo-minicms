@@ -184,6 +184,8 @@ The public menu collapses into a small hamburger menu on mobile.
 
 The admin `Footer` tab manages the global Markdown footer shown on public pages. The default footer uses the current year and site name, and can be replaced with contact details, address lines, policy links, or social profile links.
 
+See [docs/CONTENT.md](docs/CONTENT.md) for Markdown shortcodes, including YouTube and Vimeo video embeds.
+
 Mermaid diagrams can be written as fenced code blocks:
 
 ````markdown
