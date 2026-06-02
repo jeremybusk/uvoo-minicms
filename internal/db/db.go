@@ -71,10 +71,12 @@ type Settings struct {
 	LogoURL              string    `json:"logo_url"`
 	FaviconURL           string    `json:"favicon_url"`
 	DefaultTheme         string    `json:"default_theme"`
+	PublicThemeStyle     string    `json:"public_theme_style"`
 	PublicPrimaryColor   string    `json:"public_primary_color"`
 	PublicSecondaryColor string    `json:"public_secondary_color"`
 	PublicHeaderStyle    string    `json:"public_header_style"`
 	AdminTheme           string    `json:"admin_theme"`
+	ThemeStyle           string    `json:"theme_style"`
 	AdminPrimaryColor    string    `json:"admin_primary_color"`
 	AdminSecondaryColor  string    `json:"admin_secondary_color"`
 	AdminPalette         string    `json:"admin_palette"`
@@ -88,6 +90,21 @@ type Settings struct {
 	IconsEnabled         bool      `json:"icons_enabled"`
 	SearchEnabled        bool      `json:"search_enabled"`
 	NavLayout            string    `json:"nav_layout"`
+}
+
+type ThemeHistory struct {
+	ID                   int64  `json:"id"`
+	AdminTheme           string `json:"admin_theme"`
+	ThemeStyle           string `json:"theme_style"`
+	AdminPrimaryColor    string `json:"admin_primary_color"`
+	AdminSecondaryColor  string `json:"admin_secondary_color"`
+	AdminPalette         string `json:"admin_palette"`
+	PublicTheme          string `json:"public_theme"`
+	PublicThemeStyle     string `json:"public_theme_style"`
+	PublicPrimaryColor   string `json:"public_primary_color"`
+	PublicSecondaryColor string `json:"public_secondary_color"`
+	PublicHeaderStyle    string `json:"public_header_style"`
+	UpdatedAt            string `json:"updated_at"`
 }
 
 func Open(path string) (*Store, error) {
@@ -142,6 +159,22 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE TABLE IF NOT EXISTS theme_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  admin_theme TEXT NOT NULL,
+  theme_style TEXT NOT NULL DEFAULT 'soft',
+  admin_primary_color TEXT NOT NULL,
+  admin_secondary_color TEXT NOT NULL,
+  admin_palette TEXT NOT NULL,
+  public_theme TEXT NOT NULL,
+  public_theme_style TEXT NOT NULL DEFAULT 'soft',
+  public_primary_color TEXT NOT NULL,
+  public_secondary_color TEXT NOT NULL,
+  public_header_style TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  UNIQUE(admin_theme, theme_style, admin_primary_color, admin_secondary_color, admin_palette, public_theme, public_theme_style, public_primary_color, public_secondary_color, public_header_style)
 );
 CREATE TABLE IF NOT EXISTS acl_settings (
   id INTEGER PRIMARY KEY CHECK (id=1),
@@ -403,12 +436,14 @@ func (s *Store) GetSettings(ctx context.Context, fallbackSiteName string) (Setti
 	if settings.PublicSecondaryColor == "" {
 		settings.PublicSecondaryColor = "#64748b"
 	}
+	settings.PublicThemeStyle = normalizeThemeStyle(settings.PublicThemeStyle)
 	if settings.PublicHeaderStyle != "accent-line" && settings.PublicHeaderStyle != "accent-bg" {
 		settings.PublicHeaderStyle = "neutral"
 	}
 	if settings.AdminTheme != "dark" {
 		settings.AdminTheme = "light"
 	}
+	settings.ThemeStyle = normalizeThemeStyle(settings.ThemeStyle)
 	if settings.PublicHeaderStyle != "accent-line" && settings.PublicHeaderStyle != "accent-bg" {
 		settings.PublicHeaderStyle = "neutral"
 	}
@@ -435,9 +470,11 @@ func (s *Store) SaveSettings(ctx context.Context, settings Settings) (Settings, 
 	if settings.DefaultTheme != "dark" {
 		settings.DefaultTheme = "light"
 	}
+	settings.PublicThemeStyle = normalizeThemeStyle(settings.PublicThemeStyle)
 	if settings.AdminTheme != "dark" {
 		settings.AdminTheme = "light"
 	}
+	settings.ThemeStyle = normalizeThemeStyle(settings.ThemeStyle)
 	if settings.AdminPrimaryColor == "" {
 		settings.AdminPrimaryColor = "#386bc0"
 	}
@@ -463,7 +500,51 @@ ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated
 	if err != nil {
 		return Settings{}, err
 	}
+	if err := s.SaveThemeHistory(ctx, settings); err != nil {
+		return Settings{}, err
+	}
 	return settings, nil
+}
+
+func (s *Store) SaveThemeHistory(ctx context.Context, settings Settings) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err := s.DB.ExecContext(ctx, `INSERT INTO theme_history(admin_theme,theme_style,admin_primary_color,admin_secondary_color,admin_palette,public_theme,public_theme_style,public_primary_color,public_secondary_color,public_header_style,updated_at)
+VALUES(?,?,?,?,?,?,?,?,?,?,?)
+ON CONFLICT(admin_theme, theme_style, admin_primary_color, admin_secondary_color, admin_palette, public_theme, public_theme_style, public_primary_color, public_secondary_color, public_header_style)
+DO UPDATE SET updated_at=excluded.updated_at`,
+		settings.AdminTheme,
+		settings.ThemeStyle,
+		settings.AdminPrimaryColor,
+		settings.AdminSecondaryColor,
+		settings.AdminPalette,
+		settings.DefaultTheme,
+		settings.PublicThemeStyle,
+		settings.PublicPrimaryColor,
+		settings.PublicSecondaryColor,
+		settings.PublicHeaderStyle,
+		now,
+	)
+	return err
+}
+
+func (s *Store) ListThemeHistory(ctx context.Context, limit int) ([]ThemeHistory, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,admin_theme,theme_style,admin_primary_color,admin_secondary_color,admin_palette,public_theme,public_theme_style,public_primary_color,public_secondary_color,public_header_style,updated_at FROM theme_history ORDER BY updated_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ThemeHistory
+	for rows.Next() {
+		var item ThemeHistory
+		if err := rows.Scan(&item.ID, &item.AdminTheme, &item.ThemeStyle, &item.AdminPrimaryColor, &item.AdminSecondaryColor, &item.AdminPalette, &item.PublicTheme, &item.PublicThemeStyle, &item.PublicPrimaryColor, &item.PublicSecondaryColor, &item.PublicHeaderStyle, &item.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }
 
 func DefaultSettings(siteName string) Settings {
@@ -473,10 +554,12 @@ func DefaultSettings(siteName string) Settings {
 	return Settings{
 		SiteName:             siteName,
 		DefaultTheme:         "light",
+		PublicThemeStyle:     "soft",
 		PublicPrimaryColor:   "#386bc0",
 		PublicSecondaryColor: "#64748b",
 		PublicHeaderStyle:    "neutral",
 		AdminTheme:           "light",
+		ThemeStyle:           "soft",
 		AdminPrimaryColor:    "#386bc0",
 		AdminSecondaryColor:  "#64748b",
 		AdminPalette:         "slate",
@@ -500,6 +583,15 @@ func normalizeSettings(settings *Settings) {
 		if settings.Menu[i].ID == "" {
 			settings.Menu[i].ID = fmt.Sprintf("item-%d", i+1)
 		}
+	}
+}
+
+func normalizeThemeStyle(style string) string {
+	switch strings.ToLower(strings.TrimSpace(style)) {
+	case "square", "material":
+		return strings.ToLower(strings.TrimSpace(style))
+	default:
+		return "soft"
 	}
 }
 

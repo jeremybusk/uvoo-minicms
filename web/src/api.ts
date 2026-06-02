@@ -28,10 +28,12 @@ export type SiteSettings = {
   logo_url:string
   favicon_url:string
   default_theme:'light'|'dark'
+  public_theme_style:'soft'|'square'|'material'
   public_primary_color:string
   public_secondary_color:string
   public_header_style:'neutral'|'accent-line'|'accent-bg'
   admin_theme:'light'|'dark'
+  theme_style:'soft'|'square'|'material'
   admin_primary_color:string
   admin_secondary_color:string
   admin_palette:'slate'|'forest'|'ember'|'mono'|'custom'
@@ -45,6 +47,20 @@ export type SiteSettings = {
   icons_enabled:boolean
   search_enabled:boolean
   nav_layout:'top'|'side'
+}
+export type ThemeHistory = {
+  id:number
+  admin_theme:'light'|'dark'
+  theme_style:'soft'|'square'|'material'
+  admin_primary_color:string
+  admin_secondary_color:string
+  admin_palette:'slate'|'forest'|'ember'|'mono'|'custom'
+  public_theme:'light'|'dark'
+  public_theme_style:'soft'|'square'|'material'
+  public_primary_color:string
+  public_secondary_color:string
+  public_header_style:'neutral'|'accent-line'|'accent-bg'
+  updated_at:string
 }
 export type ImportPage = {
   slug:string
@@ -97,6 +113,7 @@ export const api = {
   deletePage: (slug:string) => rpc<{ok:boolean}>('DeletePage', { slug }),
   getSettings: () => rpc<{settings:SiteSettings}>('GetSettings'),
   saveSettings: (settings: SiteSettings) => rpc<{settings:SiteSettings}>('SaveSettings', settings),
+  listThemeHistory: () => rpc<{themes:ThemeHistory[]}>('ListThemeHistory'),
   listAssets: () => rpc<{assets:Asset[]}>('ListAssets'),
   uploadFile: (name:string, data:string) => rpc<{asset:Asset}>('UploadFile', { name, data }),
   deleteAsset: (id:number) => rpc<{ok:boolean, settings:SiteSettings}>('DeleteAsset', { id }),

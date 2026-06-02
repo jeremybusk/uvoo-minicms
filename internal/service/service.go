@@ -141,6 +141,17 @@ func (s *Service) SaveSettings(ctx context.Context, req *connect.Request[structp
 	}
 	return ok(map[string]any{"settings": settingsMap(settings)})
 }
+func (s *Service) ListThemeHistory(ctx context.Context, _ *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error) {
+	items, err := s.Store.ListThemeHistory(ctx, 20)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	history := make([]any, 0, len(items))
+	for _, item := range items {
+		history = append(history, themeHistoryMap(item))
+	}
+	return ok(map[string]any{"themes": history})
+}
 func (s *Service) ListAssets(ctx context.Context, _ *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error) {
 	assets, err := s.Store.ListAssets(ctx, 120)
 	if err != nil {
@@ -581,10 +592,12 @@ func settingsMap(settings db.Settings) map[string]any {
 		"logo_url":               settings.LogoURL,
 		"favicon_url":            settings.FaviconURL,
 		"default_theme":          settings.DefaultTheme,
+		"public_theme_style":     settings.PublicThemeStyle,
 		"public_primary_color":   settings.PublicPrimaryColor,
 		"public_secondary_color": settings.PublicSecondaryColor,
 		"public_header_style":    settings.PublicHeaderStyle,
 		"admin_theme":            settings.AdminTheme,
+		"theme_style":            settings.ThemeStyle,
 		"admin_primary_color":    settings.AdminPrimaryColor,
 		"admin_secondary_color":  settings.AdminSecondaryColor,
 		"admin_palette":          settings.AdminPalette,
@@ -601,16 +614,35 @@ func settingsMap(settings db.Settings) map[string]any {
 	}
 }
 
+func themeHistoryMap(item db.ThemeHistory) map[string]any {
+	return map[string]any{
+		"id":                     item.ID,
+		"admin_theme":            item.AdminTheme,
+		"theme_style":            item.ThemeStyle,
+		"admin_primary_color":    item.AdminPrimaryColor,
+		"admin_secondary_color":  item.AdminSecondaryColor,
+		"admin_palette":          item.AdminPalette,
+		"public_theme":           item.PublicTheme,
+		"public_theme_style":     item.PublicThemeStyle,
+		"public_primary_color":   item.PublicPrimaryColor,
+		"public_secondary_color": item.PublicSecondaryColor,
+		"public_header_style":    item.PublicHeaderStyle,
+		"updated_at":             item.UpdatedAt,
+	}
+}
+
 func settingsFromMap(m map[string]any, fallbackSiteName string) (db.Settings, error) {
 	settings := db.Settings{
 		SiteName:             firstNonEmpty(str(m, "site_name"), fallbackSiteName),
 		LogoURL:              cleanAssetURL(str(m, "logo_url")),
 		FaviconURL:           cleanAssetURL(str(m, "favicon_url")),
 		DefaultTheme:         cleanTheme(str(m, "default_theme")),
+		PublicThemeStyle:     cleanThemeStyle(str(m, "public_theme_style")),
 		PublicPrimaryColor:   cleanHexColor(str(m, "public_primary_color")),
 		PublicSecondaryColor: cleanHexColorWithDefault(str(m, "public_secondary_color"), "#64748b"),
 		PublicHeaderStyle:    cleanHeaderStyle(str(m, "public_header_style")),
 		AdminTheme:           cleanTheme(str(m, "admin_theme")),
+		ThemeStyle:           cleanThemeStyle(str(m, "theme_style")),
 		AdminPrimaryColor:    cleanHexColor(str(m, "admin_primary_color")),
 		AdminSecondaryColor:  cleanHexColorWithDefault(str(m, "admin_secondary_color"), "#64748b"),
 		AdminPalette:         cleanPalette(str(m, "admin_palette")),
@@ -697,6 +729,14 @@ func cleanTheme(s string) string {
 		return "dark"
 	}
 	return "light"
+}
+func cleanThemeStyle(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "square", "material":
+		return strings.ToLower(strings.TrimSpace(s))
+	default:
+		return "soft"
+	}
 }
 func cleanPalette(s string) string {
 	switch strings.ToLower(strings.TrimSpace(s)) {
