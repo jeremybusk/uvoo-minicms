@@ -662,6 +662,9 @@ func settingsFromMap(m map[string]any, fallbackSiteName string) (db.Settings, er
 	if settings.SiteName == "" {
 		return db.Settings{}, errors.New("site name required")
 	}
+	if err := validateNavItems(settings.Menu); err != nil {
+		return db.Settings{}, err
+	}
 	return settings, nil
 }
 
@@ -700,6 +703,59 @@ func cleanNavItemType(s string) string {
 		return "section"
 	}
 	return "link"
+}
+
+func validateNavItems(items []db.NavItem) error {
+	ids := map[string]db.NavItem{}
+	for _, item := range items {
+		if item.ID == "" {
+			continue
+		}
+		if _, exists := ids[item.ID]; exists {
+			return fmt.Errorf("menu item %q uses a duplicate id", item.Label)
+		}
+		ids[item.ID] = item
+	}
+	for _, item := range items {
+		if item.ParentID == "" {
+			continue
+		}
+		if item.ID != "" && item.ParentID == item.ID {
+			return fmt.Errorf("menu item %q cannot be its own parent", item.Label)
+		}
+		if _, ok := ids[item.ParentID]; !ok {
+			return fmt.Errorf("menu item %q references a missing parent", item.Label)
+		}
+	}
+	visiting := map[string]bool{}
+	visited := map[string]bool{}
+	var visit func(db.NavItem) error
+	visit = func(item db.NavItem) error {
+		if item.ID == "" || item.ParentID == "" {
+			return nil
+		}
+		if visited[item.ID] {
+			return nil
+		}
+		if visiting[item.ID] {
+			return fmt.Errorf("menu item %q is part of a parent cycle", item.Label)
+		}
+		visiting[item.ID] = true
+		if parent, ok := ids[item.ParentID]; ok {
+			if err := visit(parent); err != nil {
+				return err
+			}
+		}
+		visiting[item.ID] = false
+		visited[item.ID] = true
+		return nil
+	}
+	for _, item := range items {
+		if err := visit(item); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 var slugRe = regexp.MustCompile(`[^a-z0-9-]+`)

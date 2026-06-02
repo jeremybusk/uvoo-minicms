@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -109,6 +110,37 @@ func TestSetSiteImageOptimizesFromURLAndKeepsExternalSettingURL(t *testing.T) {
 	}
 	if mapped.LogoURL != "https://cdn.example.com/logo.png" {
 		t.Fatalf("external logo URL should be preserved, got %q", mapped.LogoURL)
+	}
+}
+
+func TestValidateNavItemsRejectsMissingParent(t *testing.T) {
+	err := validateNavItems([]db.NavItem{
+		{ID: "child", Type: "link", ParentID: "missing", Label: "Child", URL: "/child", Enabled: true},
+	})
+	if err == nil || !strings.Contains(err.Error(), "missing parent") {
+		t.Fatalf("expected missing parent error, got %v", err)
+	}
+}
+
+func TestValidateNavItemsRejectsParentCycle(t *testing.T) {
+	err := validateNavItems([]db.NavItem{
+		{ID: "a", Type: "section", ParentID: "b", Label: "A", Enabled: true},
+		{ID: "b", Type: "section", ParentID: "a", Label: "B", Enabled: true},
+	})
+	if err == nil || !strings.Contains(err.Error(), "parent cycle") {
+		t.Fatalf("expected parent cycle error, got %v", err)
+	}
+}
+
+func TestValidateNavItemsAcceptsNestedTree(t *testing.T) {
+	err := validateNavItems([]db.NavItem{
+		{ID: "services", Type: "link", Label: "Services", URL: "/services", Enabled: true},
+		{ID: "support", Type: "link", ParentID: "services", Label: "Support", URL: "/services/support", Enabled: true},
+		{ID: "resources", Type: "section", Label: "Resources", Enabled: true},
+		{ID: "blog", Type: "link", ParentID: "resources", Label: "Blog", URL: "/blog", Enabled: true},
+	})
+	if err != nil {
+		t.Fatalf("expected valid tree, got %v", err)
 	}
 }
 
