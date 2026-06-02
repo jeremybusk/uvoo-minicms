@@ -121,7 +121,14 @@ body,
   min-height: 82px;
   border: 1px dashed var(--admin-border);
   border-radius: 8px;
-  background: var(--admin-surface);
+  background-color: var(--admin-surface);
+  background-image:
+    linear-gradient(45deg, color-mix(in srgb, var(--admin-border) 45%, transparent) 25%, transparent 25%),
+    linear-gradient(-45deg, color-mix(in srgb, var(--admin-border) 45%, transparent) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--admin-border) 45%, transparent) 75%),
+    linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--admin-border) 45%, transparent) 75%);
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
   color: var(--admin-muted);
   overflow: hidden;
 }
@@ -266,7 +273,14 @@ body,
   aspect-ratio: 4 / 3;
   padding: 0;
   overflow: hidden;
-  background: var(--admin-surface);
+  background-color: var(--admin-surface);
+  background-image:
+    linear-gradient(45deg, color-mix(in srgb, var(--admin-border) 40%, transparent) 25%, transparent 25%),
+    linear-gradient(-45deg, color-mix(in srgb, var(--admin-border) 40%, transparent) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--admin-border) 40%, transparent) 75%),
+    linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--admin-border) 40%, transparent) 75%);
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
   border: 1px solid var(--admin-border);
   border-radius: 10px;
   cursor: pointer;
@@ -277,6 +291,11 @@ body,
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.mediaTileActions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .emptyMedia {

@@ -152,6 +152,39 @@ func (s *Service) ListAssets(ctx context.Context, _ *connect.Request[structpb.St
 	}
 	return ok(map[string]any{"assets": items})
 }
+func (s *Service) DeleteAsset(ctx context.Context, req *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error) {
+	id := int64(number(fields(req), "id"))
+	if id <= 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("asset id is required"))
+	}
+	asset, err := s.Store.GetAsset(ctx, id)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	settings, err := s.Store.GetSettings(ctx, s.SiteName)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if settings.LogoURL == asset.URL {
+		settings.LogoURL = ""
+		settings.LogoEnabled = false
+	}
+	if settings.FaviconURL == asset.URL {
+		settings.FaviconURL = ""
+		settings.FaviconEnabled = false
+	}
+	settings, err = s.Store.SaveSettings(ctx, settings)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if err := s.removeUploadFile(asset.Path); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if err := s.Store.DeleteAsset(ctx, id); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return ok(map[string]any{"ok": true, "settings": settingsMap(settings)})
+}
 func (s *Service) GetACL(ctx context.Context, _ *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error) {
 	settings, rules, err := s.Store.GetACL(ctx)
 	if err != nil {
@@ -292,6 +325,31 @@ func (s *Service) writeUploadAsset(ctx context.Context, name string, data []byte
 	}
 	url := "/uploads/" + day + "/" + name
 	return s.Store.InsertAsset(ctx, name, path, url, int64(len(data)))
+}
+
+func (s *Service) removeUploadFile(assetPath string) error {
+	if strings.TrimSpace(assetPath) == "" {
+		return nil
+	}
+	root, err := filepath.Abs(s.UploadDir)
+	if err != nil {
+		return err
+	}
+	target, err := filepath.Abs(assetPath)
+	if err != nil {
+		return err
+	}
+	rel, err := filepath.Rel(root, target)
+	if err != nil {
+		return err
+	}
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return fmt.Errorf("asset path %q is outside upload directory", assetPath)
+	}
+	if err := os.Remove(target); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 func importOptions(m map[string]any) importer.Options {

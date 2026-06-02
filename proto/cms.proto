@@ -14,6 +14,8 @@ service CMSService {
   rpc SaveSettings(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc ListAssets(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc UploadFile(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc DeleteAsset(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc SetSiteImage(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc GetACL(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc SaveACL(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc ImportPreview(google.protobuf.Struct) returns (google.protobuf.Struct);

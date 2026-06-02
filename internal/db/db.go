@@ -295,6 +295,20 @@ func (s *Store) ListAssets(ctx context.Context, limit int) ([]Asset, error) {
 	return assets, rows.Err()
 }
 
+func (s *Store) GetAsset(ctx context.Context, id int64) (Asset, error) {
+	var a Asset
+	err := s.DB.QueryRowContext(ctx, `SELECT id,name,path,url,size,created_at FROM assets WHERE id=?`, id).Scan(&a.ID, &a.Name, &a.Path, &a.URL, &a.Size, &a.CreatedAt)
+	if err != nil {
+		return Asset{}, err
+	}
+	return a, nil
+}
+
+func (s *Store) DeleteAsset(ctx context.Context, id int64) error {
+	_, err := s.DB.ExecContext(ctx, `DELETE FROM assets WHERE id=?`, id)
+	return err
+}
+
 func (s *Store) GetACL(ctx context.Context) (SecuritySettings, []ACLRule, error) {
 	settings := SecuritySettings{AdminDefault: "allow", PublicDefault: "allow"}
 	err := s.DB.QueryRowContext(ctx, `SELECT admin_default,public_default,admin_allow_countries,admin_deny_countries,public_allow_countries,public_deny_countries FROM acl_settings WHERE id=1`).Scan(&settings.AdminDefault, &settings.PublicDefault, &settings.AdminAllowCountries, &settings.AdminDenyCountries, &settings.PublicAllowCountries, &settings.PublicDenyCountries)
