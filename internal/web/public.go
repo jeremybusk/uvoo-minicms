@@ -351,6 +351,7 @@ func renderMenu(items []db.NavItem) template.HTML {
 		}
 	}
 	var b strings.Builder
+	b.WriteString(navMenuStyle())
 	writeMenu(&b, children, "")
 	return template.HTML(b.String())
 }
@@ -364,7 +365,7 @@ func writeMenu(b *strings.Builder, children map[string][]db.NavItem, parentID st
 			if item.Type == "section" {
 				fmt.Fprintf(b, `<div class="navGroup"><button class="navSection" type="button" aria-expanded="false" aria-controls="%s" style="display:flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--ink);padding:8px 11px;border-radius:var(--radius-pill);cursor:pointer;font:inherit;font-weight:600" onclick="%s"><span>%s</span><span class="navChevron" aria-hidden="true">▾</span></button><div class="subnav" id="%s">`, subnavID, navToggleJS(), label, subnavID)
 			} else {
-				fmt.Fprintf(b, `<div class="navGroup"><div class="navParent"><a href="%s"%s>%s</a><button class="navToggle" type="button" aria-label="Toggle %s submenu" aria-expanded="false" aria-controls="%s" style="display:grid" onclick="%s">▾</button></div><div class="subnav" id="%s">`, template.HTMLEscapeString(item.URL), externalAttrs(item.External), label, label, subnavID, navToggleJS(), subnavID)
+				fmt.Fprintf(b, `<div class="navGroup"><div class="navParent"><a href="%s"%s>%s</a><button class="navToggle" type="button" aria-label="Toggle %s submenu" aria-expanded="false" aria-controls="%s" onclick="%s">▾</button></div><div class="subnav" id="%s">`, template.HTMLEscapeString(item.URL), externalAttrs(item.External), label, label, subnavID, navToggleJS(), subnavID)
 			}
 			writeMenu(b, children, item.ID)
 			b.WriteString(`</div></div>`)
@@ -378,8 +379,12 @@ func writeMenu(b *strings.Builder, children map[string][]db.NavItem, parentID st
 	}
 }
 
+func navMenuStyle() string {
+	return `<style>.nav .navToggle{display:none!important}.nav .navChevron{display:none}.nav .navSection:hover,.nav .navSection:focus{background:var(--soft);outline:0}.drawerNav .navToggle{display:grid!important}.drawerNav .navChevron{display:inline}.drawerNav .navSection{width:100%;justify-content:space-between;border-radius:var(--radius-sm)!important;padding:10px 12px!important}.drawerNav .navSection:hover,.drawerNav .navSection:focus{background:var(--soft);outline:0}.drawerNav .navGroup:hover>.subnav,.drawerNav .navGroup:focus-within>.subnav{display:none}.drawerNav .navGroup.open>.subnav,.drawerNav .navGroup.open:hover>.subnav,.drawerNav .navGroup.open:focus-within>.subnav{display:flex;flex-direction:column}.siteSide .drawerBtn{order:-2;display:inline-grid!important}.siteSide .brand{margin-right:auto}@media(max-width:720px){.nav .navToggle{display:grid!important}.nav .navChevron{display:inline}.nav .navSection{width:100%;justify-content:space-between;padding:11px 12px!important;border-radius:var(--radius-sm)!important}.nav .navSectionLabel{padding:11px 12px!important}.nav .navGroup:hover>.subnav,.nav .navGroup:focus-within>.subnav{display:none}.nav .navGroup.open>.subnav,.nav .navGroup.open:hover>.subnav,.nav .navGroup.open:focus-within>.subnav{display:flex;flex-direction:column}}</style>`
+}
+
 func navToggleJS() string {
-	return `var g=this.closest('.navGroup');var s=g.querySelector('.subnav');var o=g.classList.toggle('open');this.setAttribute('aria-expanded',o?'true':'false');if(s){s.style.display=o?'flex':'';s.style.flexDirection='column'}var c=this.querySelector('.navChevron');if(c){c.textContent=o?'▴':'▾'}else{this.textContent=o?'▴':'▾'}`
+	return `var g=this.closest('.navGroup');var o=g.classList.toggle('open');this.setAttribute('aria-expanded',o?'true':'false');var c=this.querySelector('.navChevron');if(c){c.textContent=o?'▴':'▾'}else{this.textContent=o?'▴':'▾'}`
 }
 
 func externalAttrs(external bool) string {

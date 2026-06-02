@@ -65,4 +65,13 @@ func TestRenderMenuKeepsLinkParentClickable(t *testing.T) {
 	if !strings.Contains(html, `class="navToggle"`) {
 		t.Fatalf("expected separate submenu toggle, got %s", html)
 	}
+	if strings.Contains(html, `style="display:grid"`) {
+		t.Fatalf("desktop toggle visibility should be controlled by scoped CSS, got %s", html)
+	}
+	if !strings.Contains(html, `.nav .navToggle{display:none!important}`) {
+		t.Fatalf("expected top desktop nav toggles to be hidden by default, got %s", html)
+	}
+	if !strings.Contains(html, `.drawerNav .navGroup:hover>.subnav,.drawerNav .navGroup:focus-within>.subnav{display:none}`) {
+		t.Fatalf("expected drawer hover/focus override so collapsed submenus stay closed, got %s", html)
+	}
 }
