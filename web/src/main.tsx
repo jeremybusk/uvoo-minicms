@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { App as AntApp, Button, Card, ConfigProvider, Dropdown, Form, Input, Layout, List, Modal, Popconfirm, Select, Space, Switch, Tabs, Typography, Upload, message, theme } from 'antd'
 import type { MenuProps, UploadProps } from 'antd'
 import './style.css'
-import { api, ACLRule, ACLSettings, Asset, ImportOptions, ImportResult, NavItem, Page, SiteSettings } from './api'
+import { api, ACLRule, ACLSettings, Asset, ImportOptions, ImportResult, NavItem, Page, SiteSettings, ThemeHistory } from './api'
 
 const MdxBodyEditor = React.lazy(() => import('./MdxBodyEditor'))
 
@@ -16,6 +16,7 @@ const palettes = {
 
 type Palette = keyof typeof palettes | 'custom'
 type IdentityKind = 'logo' | 'favicon'
+type ThemeStyle = 'soft' | 'square' | 'material'
 
 function slugify(s:string) { return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') }
 function pathify(s:string) {
@@ -36,6 +37,14 @@ function hexToRgb(hex:string) {
   const cleaned = hex.replace('#', '')
   const value = /^[0-9a-fA-F]{6}$/.test(cleaned) ? cleaned : '386bc0'
   return `${parseInt(value.slice(0, 2), 16)}, ${parseInt(value.slice(2, 4), 16)}, ${parseInt(value.slice(4, 6), 16)}`
+}
+function themeRadius(style: ThemeStyle) {
+  if (style === 'square') return 2
+  if (style === 'material') return 4
+  return 8
+}
+function themeLabel(theme: ThemeHistory) {
+  return `${theme.admin_primary_color} / ${theme.public_primary_color} · ${theme.theme_style}`
 }
 function isImage(url:string) {
   return /\.(avif|gif|jpe?g|png|webp)$/i.test(url)
@@ -60,11 +69,17 @@ const emptyACL: ACLSettings = {
   public_deny_countries: '',
   rules: []
 }
+const themeStyleOptions = [
+  { label: 'Soft', value: 'soft' },
+  { label: 'Square', value: 'square' },
+  { label: 'Material', value: 'material' }
+]
 
 function Root() {
   const [pages, setPages] = useState<Page[]>([])
   const [assets, setAssets] = useState<Asset[]>([])
   const [acl, setACL] = useState<ACLSettings>(emptyACL)
+  const [themeHistory, setThemeHistory] = useState<ThemeHistory[]>([])
   const [active, setActive] = useState<Page | null>(null)
   const [saving, setSaving] = useState(false)
   const [savingSettings, setSavingSettings] = useState(false)
@@ -77,7 +92,9 @@ function Root() {
   const [customPrimary, setCustomPrimary] = useState('#386bc0')
   const [customSecondary, setCustomSecondary] = useState('#64748b')
   const [adminDark, setAdminDark] = useState(false)
+  const [themeStyle, setThemeStyle] = useState<ThemeStyle>('soft')
   const [publicTheme, setPublicTheme] = useState<'light'|'dark'>('light')
+  const [publicThemeStyle, setPublicThemeStyle] = useState<ThemeStyle>('soft')
   const [publicPrimary, setPublicPrimary] = useState('#386bc0')
   const [publicSecondary, setPublicSecondary] = useState('#64748b')
   const [publicHeaderStyle, setPublicHeaderStyle] = useState<'neutral'|'accent-line'|'accent-bg'>('neutral')
@@ -112,7 +129,9 @@ function Root() {
     colorBgElevated: adminDark ? '#1f2a3d' : '#ffffff',
     colorText: adminDark ? '#e5edf8' : selectedPalette.colorText,
     colorTextSecondary: adminDark ? '#9fb0c7' : '#657085',
-    colorBorder: adminDark ? '#2c3b52' : selectedPalette.colorBorder
+    colorBorder: adminDark ? '#2c3b52' : selectedPalette.colorBorder,
+    borderRadius: themeRadius(themeStyle),
+    boxShadow: themeStyle === 'material' ? '0 3px 8px rgba(15, 23, 42, .22)' : undefined
   }
   const cfg = useMemo(() => ({
     token: adminTokens,
@@ -130,7 +149,9 @@ function Root() {
     '--admin-text': adminTokens.colorText,
     '--admin-muted': adminTokens.colorTextSecondary,
     '--admin-border': adminTokens.colorBorder,
-    '--admin-shadow': adminDark ? '#00000055' : '#17203312'
+    '--admin-radius': themeStyle === 'square' ? '4px' : themeStyle === 'material' ? '8px' : '20px',
+    '--admin-control-radius': `${themeRadius(themeStyle)}px`,
+    '--admin-shadow': themeStyle === 'material' ? (adminDark ? '#00000070' : '#17203326') : (adminDark ? '#00000055' : '#17203312')
   } as React.CSSProperties
   const imageSuggestions = assets.filter(asset => isImage(asset.url)).map(asset => asset.url)
 
@@ -146,7 +167,9 @@ function Root() {
     setCustomPrimary(r.settings.admin_primary_color || '#386bc0')
     setCustomSecondary(r.settings.admin_secondary_color || '#64748b')
     if (r.settings.admin_palette) setPalette(r.settings.admin_palette)
+    setThemeStyle(r.settings.theme_style || 'soft')
     setPublicTheme(r.settings.default_theme === 'dark' ? 'dark' : 'light')
+    setPublicThemeStyle(r.settings.public_theme_style || 'soft')
     setPublicPrimary(r.settings.public_primary_color || '#386bc0')
     setPublicSecondary(r.settings.public_secondary_color || '#64748b')
     setPublicHeaderStyle(r.settings.public_header_style || 'neutral')
@@ -165,6 +188,10 @@ function Root() {
   async function loadACL() {
     const r = await api.getACL()
     setACL({ ...emptyACL, ...r.acl, rules: r.acl.rules || [] })
+  }
+  async function loadThemeHistory() {
+    const r = await api.listThemeHistory()
+    setThemeHistory(r.themes || [])
   }
   async function openPage(slug:string) {
     const r = await api.getPage(slug)
@@ -200,19 +227,24 @@ function Root() {
         public_secondary_color: values.public_secondary_color || publicSecondary,
         public_header_style: values.public_header_style || publicHeaderStyle,
         admin_theme: adminDark ? 'dark' : 'light',
+        theme_style: themeStyle,
         admin_primary_color: adminTokens.colorPrimary,
         admin_secondary_color: customSecondary,
         admin_palette: palette,
+        public_theme_style: values.public_theme_style || publicThemeStyle,
         menu
       } as SiteSettings)
       settingsForm.setFieldsValue(r.settings)
       setPublicTheme(r.settings.default_theme === 'dark' ? 'dark' : 'light')
+      setPublicThemeStyle(r.settings.public_theme_style || 'soft')
       setPublicPrimary(r.settings.public_primary_color || '#386bc0')
       setPublicSecondary(r.settings.public_secondary_color || '#64748b')
       setPublicHeaderStyle(r.settings.public_header_style || 'neutral')
       setFooterEnabled(r.settings.footer_enabled !== false)
       setFooterMarkdown(r.settings.footer_markdown || defaultFooter(r.settings.site_name))
       setCustomSecondary(r.settings.admin_secondary_color || '#64748b')
+      setThemeStyle(r.settings.theme_style || 'soft')
+      await loadThemeHistory()
       message.success('Site settings saved')
     } catch(e:any) {
       message.error(e.message)
@@ -252,6 +284,30 @@ function Root() {
   }
   function removeACLRule(index:number) {
     setACL(current => ({ ...current, rules: current.rules.filter((_, i) => i !== index) }))
+  }
+  function applyThemeHistory(theme: ThemeHistory) {
+    setAdminDark(theme.admin_theme === 'dark')
+    setThemeStyle(theme.theme_style || 'soft')
+    setPalette(theme.admin_palette || 'custom')
+    setCustomPrimary(theme.admin_primary_color)
+    setCustomSecondary(theme.admin_secondary_color)
+    setPublicTheme(theme.public_theme === 'dark' ? 'dark' : 'light')
+    setPublicThemeStyle(theme.public_theme_style || 'soft')
+    setPublicPrimary(theme.public_primary_color)
+    setPublicSecondary(theme.public_secondary_color)
+    setPublicHeaderStyle(theme.public_header_style || 'neutral')
+    settingsForm.setFieldsValue({
+      admin_theme: theme.admin_theme,
+      theme_style: theme.theme_style,
+      admin_primary_color: theme.admin_primary_color,
+      admin_secondary_color: theme.admin_secondary_color,
+      admin_palette: theme.admin_palette,
+      default_theme: theme.public_theme,
+      public_theme_style: theme.public_theme_style,
+      public_primary_color: theme.public_primary_color,
+      public_secondary_color: theme.public_secondary_color,
+      public_header_style: theme.public_header_style
+    })
   }
   async function removePage(slug:string) {
     await api.deletePage(slug)
@@ -310,6 +366,7 @@ function Root() {
     loadSettings().catch(e => message.error(e.message))
     loadAssets().catch(e => message.error(e.message))
     loadACL().catch(e => message.error(e.message))
+    loadThemeHistory().catch(e => message.error(e.message))
   }, [])
   useEffect(() => {
     for (const [key, value] of Object.entries(adminVars)) {
@@ -413,7 +470,7 @@ function Root() {
 
   const mdxEditorKey = [active?.slug || 'new', active?.updated_at || '', editorRev].join('-')
 
-  return <ConfigProvider theme={cfg} getPopupContainer={trigger => trigger?.parentElement || document.body}><AntApp><Layout className="layout" style={adminVars}>
+  return <ConfigProvider theme={cfg} getPopupContainer={trigger => trigger?.parentElement || document.body}><AntApp><Layout className={`layout themeStyle-${themeStyle}`} style={adminVars}>
     <Layout.Sider className="sider" width={310} breakpoint="lg" collapsedWidth={0}>
       <div className="brand">UvooMiniCMS</div>
       <Space wrap className="palettes">
@@ -480,7 +537,7 @@ function Root() {
           <MediaBrowser assets={assets} loading={loadingAssets} onInsert={insertAsset} onDelete={confirmDeleteAsset} onRefresh={() => loadAssets().catch((e:any) => message.error(e.message))} uploadProps={mediaUploadProps} />
         </Card> },
         { key:'site', label:'Site', children:<Card className="editorCard">
-          <Form form={settingsForm} layout="vertical" onFinish={() => saveSettings()} initialValues={{site_name:'UvooMiniCMS', default_theme:'light', public_primary_color:'#386bc0', public_secondary_color:'#64748b', public_header_style:'neutral', admin_theme:'light', admin_primary_color:'#386bc0', admin_secondary_color:'#64748b', admin_palette:'slate', nav_layout:'top', footer_markdown:'', logo_enabled:true, favicon_enabled:true, menu_enabled:true, footer_enabled:true, theme_toggle_enabled:true, icons_enabled:true, search_enabled:true, menu:[{id:'home', parent_id:'', label:'Home', url:'/', external:false, enabled:true}]}}>
+          <Form form={settingsForm} layout="vertical" onFinish={() => saveSettings()} initialValues={{site_name:'UvooMiniCMS', default_theme:'light', public_theme_style:'soft', public_primary_color:'#386bc0', public_secondary_color:'#64748b', public_header_style:'neutral', admin_theme:'light', theme_style:'soft', admin_primary_color:'#386bc0', admin_secondary_color:'#64748b', admin_palette:'slate', nav_layout:'top', footer_markdown:'', logo_enabled:true, favicon_enabled:true, menu_enabled:true, footer_enabled:true, theme_toggle_enabled:true, icons_enabled:true, search_enabled:true, menu:[{id:'home', parent_id:'', label:'Home', url:'/', external:false, enabled:true}]}}>
             <Space className="topbar" align="start">
               <div>
                 <Typography.Title level={3}>Site settings</Typography.Title>
@@ -693,11 +750,24 @@ function Root() {
             <Button type={palette==='custom'?'primary':'default'} onClick={() => { setPalette('custom'); settingsForm.setFieldValue('admin_palette', 'custom') }}>Custom</Button>
             <Switch checkedChildren="Dark" unCheckedChildren="Light" checked={adminDark} onChange={checked => { setAdminDark(checked); settingsForm.setFieldValue('admin_theme', checked ? 'dark' : 'light') }} />
           </Space>
+          {themeHistory.length > 0 && <div className="themeHistory">
+            <Typography.Text strong>Recent themes</Typography.Text>
+            <Select className="recentThemeSelect" placeholder="Apply recent theme" onChange={id => {
+              const theme = themeHistory.find(item => item.id === id)
+              if (theme) applyThemeHistory(theme)
+            }} options={themeHistory.map(theme => ({ label: themeLabel(theme), value: theme.id }))} />
+            <Button onClick={() => loadThemeHistory().catch((e:any) => message.error(e.message))}>Refresh</Button>
+          </div>}
           <Form layout="vertical" className="customThemeForm">
             <Typography.Title level={4}>Admin theme</Typography.Title>
-            <Form.Item label="Default mode">
-              <Select className="themeSelect" value={adminDark ? 'dark' : 'light'} onChange={value => { setAdminDark(value === 'dark'); settingsForm.setFieldValue('admin_theme', value) }} options={[{label:'Light', value:'light'}, {label:'Dark', value:'dark'}]} />
-            </Form.Item>
+            <div className="themeControlGrid">
+              <Form.Item label="Default mode">
+                <Select className="themeSelect" value={adminDark ? 'dark' : 'light'} onChange={value => { setAdminDark(value === 'dark'); settingsForm.setFieldValue('admin_theme', value) }} options={[{label:'Light', value:'light'}, {label:'Dark', value:'dark'}]} />
+              </Form.Item>
+              <Form.Item label="UI style">
+                <Select className="themeSelect" value={themeStyle} onChange={value => { setThemeStyle(value); settingsForm.setFieldValue('theme_style', value) }} options={themeStyleOptions} />
+              </Form.Item>
+            </div>
             <Form.Item label="Custom primary color">
               <Space>
                 <Input type="color" value={customPrimary} onChange={e => { setCustomPrimary(e.target.value); setPalette('custom'); settingsForm.setFieldValue('admin_primary_color', e.target.value); settingsForm.setFieldValue('admin_palette', 'custom') }} className="colorInput" />
@@ -722,6 +792,10 @@ function Root() {
                 <Select className="themeSelect" value={publicTheme} onChange={value => { setPublicTheme(value); settingsForm.setFieldValue('default_theme', value) }} options={[{label:'Light', value:'light'}, {label:'Dark', value:'dark'}]} />
               </div>
               <div>
+                <Typography.Text>UI style</Typography.Text>
+                <Select className="themeSelect" value={publicThemeStyle} onChange={value => { setPublicThemeStyle(value); settingsForm.setFieldValue('public_theme_style', value) }} options={themeStyleOptions} />
+              </div>
+              <div>
                 <Typography.Text>Primary color</Typography.Text>
                 <Space>
                   <Input type="color" value={publicPrimary} onChange={e => { setPublicPrimary(e.target.value); settingsForm.setFieldValue('public_primary_color', e.target.value) }} className="colorInput" />
@@ -744,7 +818,7 @@ function Root() {
                 ]} />
               </div>
               <Button onClick={() => { setPublicPrimary(adminTokens.colorPrimary); settingsForm.setFieldValue('public_primary_color', adminTokens.colorPrimary) }}>Use admin primary</Button>
-              <Button type="primary" loading={savingSettings} onClick={() => saveSettings({ default_theme: publicTheme, public_primary_color: publicPrimary, public_secondary_color: publicSecondary, public_header_style: publicHeaderStyle })}>Save public theme</Button>
+              <Button type="primary" loading={savingSettings} onClick={() => saveSettings({ default_theme: publicTheme, public_theme_style: publicThemeStyle, public_primary_color: publicPrimary, public_secondary_color: publicSecondary, public_header_style: publicHeaderStyle })}>Save public theme</Button>
             </Space>
           </div>
         </Card> }

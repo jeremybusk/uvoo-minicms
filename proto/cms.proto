@@ -12,6 +12,7 @@ service CMSService {
   rpc DeletePage(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc GetSettings(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc SaveSettings(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc ListThemeHistory(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc ListAssets(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc UploadFile(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc DeleteAsset(google.protobuf.Struct) returns (google.protobuf.Struct);

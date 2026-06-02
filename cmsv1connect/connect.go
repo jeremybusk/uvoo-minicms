@@ -11,21 +11,22 @@ import (
 const CMSServiceName = "cms.v1.CMSService"
 
 const (
-	CMSServiceHealthProcedure        = "/cms.v1.CMSService/Health"
-	CMSServiceListPagesProcedure     = "/cms.v1.CMSService/ListPages"
-	CMSServiceGetPageProcedure       = "/cms.v1.CMSService/GetPage"
-	CMSServiceSavePageProcedure      = "/cms.v1.CMSService/SavePage"
-	CMSServiceDeletePageProcedure    = "/cms.v1.CMSService/DeletePage"
-	CMSServiceGetSettingsProcedure   = "/cms.v1.CMSService/GetSettings"
-	CMSServiceSaveSettingsProcedure  = "/cms.v1.CMSService/SaveSettings"
-	CMSServiceListAssetsProcedure    = "/cms.v1.CMSService/ListAssets"
-	CMSServiceUploadFileProcedure    = "/cms.v1.CMSService/UploadFile"
-	CMSServiceDeleteAssetProcedure   = "/cms.v1.CMSService/DeleteAsset"
-	CMSServiceSetSiteImageProcedure  = "/cms.v1.CMSService/SetSiteImage"
-	CMSServiceGetACLProcedure        = "/cms.v1.CMSService/GetACL"
-	CMSServiceSaveACLProcedure       = "/cms.v1.CMSService/SaveACL"
-	CMSServiceImportPreviewProcedure = "/cms.v1.CMSService/ImportPreview"
-	CMSServiceImportSiteProcedure    = "/cms.v1.CMSService/ImportSite"
+	CMSServiceHealthProcedure           = "/cms.v1.CMSService/Health"
+	CMSServiceListPagesProcedure        = "/cms.v1.CMSService/ListPages"
+	CMSServiceGetPageProcedure          = "/cms.v1.CMSService/GetPage"
+	CMSServiceSavePageProcedure         = "/cms.v1.CMSService/SavePage"
+	CMSServiceDeletePageProcedure       = "/cms.v1.CMSService/DeletePage"
+	CMSServiceGetSettingsProcedure      = "/cms.v1.CMSService/GetSettings"
+	CMSServiceSaveSettingsProcedure     = "/cms.v1.CMSService/SaveSettings"
+	CMSServiceListThemeHistoryProcedure = "/cms.v1.CMSService/ListThemeHistory"
+	CMSServiceListAssetsProcedure       = "/cms.v1.CMSService/ListAssets"
+	CMSServiceUploadFileProcedure       = "/cms.v1.CMSService/UploadFile"
+	CMSServiceDeleteAssetProcedure      = "/cms.v1.CMSService/DeleteAsset"
+	CMSServiceSetSiteImageProcedure     = "/cms.v1.CMSService/SetSiteImage"
+	CMSServiceGetACLProcedure           = "/cms.v1.CMSService/GetACL"
+	CMSServiceSaveACLProcedure          = "/cms.v1.CMSService/SaveACL"
+	CMSServiceImportPreviewProcedure    = "/cms.v1.CMSService/ImportPreview"
+	CMSServiceImportSiteProcedure       = "/cms.v1.CMSService/ImportSite"
 )
 
 type CMSServiceHandler interface {
@@ -36,6 +37,7 @@ type CMSServiceHandler interface {
 	DeletePage(context.Context, *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error)
 	GetSettings(context.Context, *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error)
 	SaveSettings(context.Context, *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error)
+	ListThemeHistory(context.Context, *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error)
 	ListAssets(context.Context, *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error)
 	UploadFile(context.Context, *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error)
 	DeleteAsset(context.Context, *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error)
@@ -55,6 +57,7 @@ func NewCMSServiceHandler(svc CMSServiceHandler, opts ...connect.HandlerOption) 
 	mux.Handle(CMSServiceDeletePageProcedure, connect.NewUnaryHandler(CMSServiceDeletePageProcedure, svc.DeletePage, opts...))
 	mux.Handle(CMSServiceGetSettingsProcedure, connect.NewUnaryHandler(CMSServiceGetSettingsProcedure, svc.GetSettings, opts...))
 	mux.Handle(CMSServiceSaveSettingsProcedure, connect.NewUnaryHandler(CMSServiceSaveSettingsProcedure, svc.SaveSettings, opts...))
+	mux.Handle(CMSServiceListThemeHistoryProcedure, connect.NewUnaryHandler(CMSServiceListThemeHistoryProcedure, svc.ListThemeHistory, opts...))
 	mux.Handle(CMSServiceListAssetsProcedure, connect.NewUnaryHandler(CMSServiceListAssetsProcedure, svc.ListAssets, opts...))
 	mux.Handle(CMSServiceUploadFileProcedure, connect.NewUnaryHandler(CMSServiceUploadFileProcedure, svc.UploadFile, opts...))
 	mux.Handle(CMSServiceDeleteAssetProcedure, connect.NewUnaryHandler(CMSServiceDeleteAssetProcedure, svc.DeleteAsset, opts...))
