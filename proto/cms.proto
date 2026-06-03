@@ -9,6 +9,7 @@ service CMSService {
   rpc ListPages(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc GetPage(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc SavePage(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc ListPageRevisions(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc DeletePage(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc GetSettings(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc SaveSettings(google.protobuf.Struct) returns (google.protobuf.Struct);

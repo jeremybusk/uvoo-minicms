@@ -61,6 +61,12 @@ func number(m map[string]any, k string) int {
 		return int(v)
 	case int:
 		return v
+	case string:
+		var n int
+		if _, err := fmt.Sscanf(strings.TrimSpace(v), "%d", &n); err == nil {
+			return n
+		}
+		return 0
 	default:
 		return 0
 	}
@@ -102,7 +108,11 @@ func (s *Service) SavePage(ctx context.Context, req *connect.Request[structpb.St
 	} else if routePath == "/" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("only the home page can use /"))
 	}
-	p, err := s.Store.SavePage(ctx, db.Page{
+	settings, err := s.Store.GetSettings(ctx, s.SiteName)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	p, err := s.Store.SavePageWithRevisions(ctx, db.Page{
 		Slug:            slug,
 		Path:            routePath,
 		Title:           str(m, "title"),
@@ -111,11 +121,23 @@ func (s *Service) SavePage(ctx context.Context, req *connect.Request[structpb.St
 		Tags:            cleanTags(str(m, "tags")),
 		Markdown:        str(m, "markdown"),
 		Published:       boolean(m, "published"),
-	})
+		PublishedAt:     cleanPublishedAt(str(m, "published_at")),
+	}, settings.RevisionHistoryLimit)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	return ok(map[string]any{"page": pageMap(p, true)})
+}
+func (s *Service) ListPageRevisions(ctx context.Context, req *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error) {
+	revisions, err := s.Store.ListPageRevisions(ctx, cleanSlug(str(fields(req), "slug")))
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	items := make([]any, 0, len(revisions))
+	for _, revision := range revisions {
+		items = append(items, pageRevisionMap(revision))
+	}
+	return ok(map[string]any{"revisions": items})
 }
 func (s *Service) DeletePage(ctx context.Context, req *connect.Request[structpb.Struct]) (*connect.Response[structpb.Struct], error) {
 	if err := s.Store.DeletePage(ctx, str(fields(req), "slug")); err != nil {
@@ -474,6 +496,7 @@ func pageMap(p db.Page, body bool) map[string]any {
 		"content_type":     p.ContentType,
 		"tags":             p.Tags,
 		"published":        p.Published,
+		"published_at":     p.PublishedAt,
 		"created_at":       p.CreatedAt,
 		"updated_at":       p.UpdatedAt,
 	}
@@ -481,6 +504,23 @@ func pageMap(p db.Page, body bool) map[string]any {
 		m["markdown"] = p.Markdown
 	}
 	return m
+}
+
+func pageRevisionMap(r db.PageRevision) map[string]any {
+	return map[string]any{
+		"id":               r.ID,
+		"page_id":          r.PageID,
+		"slug":             r.Slug,
+		"path":             r.Path,
+		"title":            r.Title,
+		"meta_description": r.MetaDescription,
+		"content_type":     r.ContentType,
+		"tags":             r.Tags,
+		"markdown":         r.Markdown,
+		"published":        r.Published,
+		"published_at":     r.PublishedAt,
+		"created_at":       r.CreatedAt,
+	}
 }
 
 func assetMap(a db.Asset) map[string]any {
@@ -613,6 +653,12 @@ func settingsMap(settings db.Settings) map[string]any {
 		"icons_enabled":          settings.IconsEnabled,
 		"search_enabled":         settings.SearchEnabled,
 		"nav_layout":             settings.NavLayout,
+		"blog_enabled":           settings.BlogEnabled,
+		"blog_path":              settings.BlogPath,
+		"blog_title":             settings.BlogTitle,
+		"blog_menu_enabled":      settings.BlogMenuEnabled,
+		"blog_posts_per_page":    settings.BlogPostsPerPage,
+		"revision_history_limit": settings.RevisionHistoryLimit,
 	}
 }
 
@@ -658,6 +704,12 @@ func settingsFromMap(m map[string]any, fallbackSiteName string) (db.Settings, er
 		IconsEnabled:         boolean(m, "icons_enabled"),
 		SearchEnabled:        boolean(m, "search_enabled"),
 		NavLayout:            cleanNavLayout(str(m, "nav_layout")),
+		BlogEnabled:          boolean(m, "blog_enabled"),
+		BlogPath:             cleanBlogPath(str(m, "blog_path")),
+		BlogTitle:            firstNonEmpty(str(m, "blog_title"), "Blog"),
+		BlogMenuEnabled:      boolean(m, "blog_menu_enabled"),
+		BlogPostsPerPage:     cleanBoundedInt(number(m, "blog_posts_per_page"), 20, 1, 100),
+		RevisionHistoryLimit: cleanBoundedInt(number(m, "revision_history_limit"), 0, 0, 100),
 	}
 	if settings.SiteName == "" {
 		return db.Settings{}, errors.New("site name required")
@@ -794,6 +846,19 @@ func cleanContentType(s string) string {
 		return "page"
 	}
 }
+func cleanPublishedAt(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t.UTC().Format(time.RFC3339)
+	}
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		return t.UTC().Format("2006-01-02")
+	}
+	return s
+}
 func cleanTheme(s string) string {
 	if strings.EqualFold(s, "dark") {
 		return "dark"
@@ -842,6 +907,19 @@ func cleanNavLayout(s string) string {
 		return "side"
 	}
 	return "top"
+}
+func cleanBlogPath(s string) string {
+	path := cleanPath(s)
+	if path == "" || path == "/" {
+		return "/blog"
+	}
+	return path
+}
+func cleanBoundedInt(value, fallback, min, max int) int {
+	if value < min || value > max {
+		return fallback
+	}
+	return value
 }
 func cleanTags(s string) string {
 	parts := strings.Split(s, ",")

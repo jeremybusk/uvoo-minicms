@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { App as AntApp, Button, Card, ConfigProvider, Dropdown, Form, Input, Layout, List, Modal, Popconfirm, Select, Space, Switch, Tabs, Typography, Upload, message, theme } from 'antd'
 import type { MenuProps, UploadProps } from 'antd'
 import './style.css'
-import { api, ACLRule, ACLSettings, Asset, ImportOptions, ImportResult, NavItem, Page, SiteSettings, ThemeHistory } from './api'
+import { api, ACLRule, ACLSettings, Asset, ImportOptions, ImportResult, NavItem, Page, PageRevision, SiteSettings, ThemeHistory } from './api'
 
 const MdxBodyEditor = React.lazy(() => import('./MdxBodyEditor'))
 
@@ -24,8 +24,12 @@ function pathify(s:string) {
   const path = s.split('/').map(slugify).filter(Boolean).join('/')
   return path ? `/${path}` : '/'
 }
+function joinPath(base:string, slug:string) {
+  const cleanBase = pathify(base || '/blog').replace(/\/+$/, '')
+  return `${cleanBase || ''}/${slug}` || `/${slug}`
+}
 function freshPage() {
-  return { slug:'', path:'', title:'', meta_description:'', content_type:'page', tags:'', markdown:'# Untitled\n', published:false } as Page
+  return { slug:'', path:'', title:'', meta_description:'', content_type:'page', tags:'', markdown:'# Untitled\n', published:false, published_at:'' } as Page
 }
 function defaultFooter(siteName = 'UvooMiniCMS') {
   return `© ${new Date().getUTCFullYear()} ${siteName}. All rights reserved.`
@@ -104,6 +108,9 @@ function Root() {
   const [savingACL, setSavingACL] = useState(false)
   const [loadingAssets, setLoadingAssets] = useState(false)
   const [mediaOpen, setMediaOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [pageRevisions, setPageRevisions] = useState<PageRevision[]>([])
+  const [loadingRevisions, setLoadingRevisions] = useState(false)
   const [sourceMode, setSourceMode] = useState(false)
   const [editorRev, setEditorRev] = useState(0)
   const [palette, setPalette] = useState<Palette>('slate')
@@ -217,11 +224,45 @@ function Root() {
     form.setFieldsValue(r.page)
     setEditorRev(rev => rev + 1)
   }
+  async function loadRevisions(slug:string) {
+    setLoadingRevisions(true)
+    setHistoryOpen(true)
+    try {
+      const r = await api.listPageRevisions(slug)
+      setPageRevisions(r.revisions || [])
+    } catch(e:any) {
+      message.error(e.message)
+    } finally {
+      setLoadingRevisions(false)
+    }
+  }
+  function restoreRevision(revision: PageRevision) {
+    form.setFieldsValue({
+      slug: revision.slug,
+      path: revision.path,
+      title: revision.title,
+      meta_description: revision.meta_description,
+      content_type: revision.content_type,
+      tags: revision.tags,
+      markdown: revision.markdown,
+      published: revision.published,
+      published_at: revision.published_at
+    })
+    setSourceMode(true)
+    setEditorRev(rev => rev + 1)
+    setHistoryOpen(false)
+    message.success('Revision loaded into editor')
+  }
   async function savePage() {
     setSaving(true)
     try {
       const v = form.getFieldsValue()
-      const r = await api.savePage({ ...v, slug: slugify(v.slug || v.title || ''), path: pathify(v.path || v.slug || v.title || '') })
+      const slug = slugify(v.slug || v.title || '')
+      const rootPath = slug ? `/${slug}` : ''
+      const generatedPath = v.content_type === 'post' && (!v.path || pathify(v.path) === rootPath)
+        ? joinPath(settingsForm.getFieldValue('blog_path') || '/blog', slug)
+        : pathify(v.path || v.slug || v.title || '')
+      const r = await api.savePage({ ...v, slug, path: generatedPath })
       setActive(r.page)
       form.setFieldsValue(r.page)
       setEditorRev(rev => rev + 1)
@@ -344,12 +385,24 @@ function Root() {
     form.resetFields()
     await loadPages()
   }
-  function newPage() {
+  function newPage(contentType: 'page'|'post' = 'page') {
     const p = freshPage()
+    p.content_type = contentType
+    if (contentType === 'post') {
+      p.markdown = '# New Post\n'
+    }
     setActive(p)
     form.setFieldsValue(p)
     setSourceMode(false)
     setEditorRev(rev => rev + 1)
+  }
+  function updateContentType(contentType: 'page'|'post') {
+    form.setFieldValue('content_type', contentType)
+    const slug = slugify(form.getFieldValue('slug') || form.getFieldValue('title') || '')
+    const currentPath = form.getFieldValue('path') || ''
+    if (contentType === 'post' && slug && (!currentPath || currentPath === `/${slug}`)) {
+      form.setFieldValue('path', joinPath(settingsForm.getFieldValue('blog_path') || '/blog', slug))
+    }
   }
   function currentImportOptions(): ImportOptions {
     return {
@@ -507,7 +560,10 @@ function Root() {
         <Button size="small" type={palette==='custom'?'primary':'default'} onClick={() => { setPalette('custom'); settingsForm.setFieldValue('admin_palette', 'custom') }}>custom</Button>
         <Switch checkedChildren="Dark" unCheckedChildren="Light" checked={adminDark} onChange={checked => { setAdminDark(checked); settingsForm.setFieldValue('admin_theme', checked ? 'dark' : 'light') }} />
       </Space>
-      <Button block type="primary" onClick={newPage}>New page</Button>
+      <Space direction="vertical" style={{ width: '100%' }}>
+        <Button block type="primary" onClick={() => newPage('page')}>New page</Button>
+        <Button block onClick={() => newPage('post')}>New post</Button>
+      </Space>
       <List className="pages" dataSource={pages} renderItem={p => <List.Item className={active?.slug===p.slug?'selected':''} onClick={() => openPage(p.slug)}>
         <List.Item.Meta title={p.title} description={`${p.path || `/${p.slug}`}${p.content_type === 'post' ? ' · post' : ''}${p.published ? '' : ' · draft'}`} />
       </List.Item>} />
@@ -520,6 +576,7 @@ function Root() {
               <Typography.Title level={3}>{active?.id ? 'Edit page' : 'New page'}</Typography.Title>
               <Space wrap>
                 <Switch checkedChildren="Markdown" unCheckedChildren="Editor" checked={sourceMode} onChange={setSourceMode} />
+                {active?.slug && <Button onClick={() => loadRevisions(active.slug)} loading={loadingRevisions}>History</Button>}
                 {active?.slug && active.slug !== 'home' && <Popconfirm title="Delete page?" onConfirm={() => removePage(active.slug)}><Button danger>Delete</Button></Popconfirm>}
                 <Button href={active?.path || '/'} target="_blank">View</Button>
                 <Button type="primary" htmlType="submit" loading={saving}>Save</Button>
@@ -527,14 +584,16 @@ function Root() {
             </Space>
             <Form.Item name="title" label="Title" rules={[{required:true}]}><Input onBlur={() => {
               const title = form.getFieldValue('title') || ''
-              if (!form.getFieldValue('slug')) form.setFieldValue('slug', slugify(title))
-              if (!form.getFieldValue('path')) form.setFieldValue('path', pathify(title))
+              const nextSlug = slugify(title)
+              if (!form.getFieldValue('slug')) form.setFieldValue('slug', nextSlug)
+              if (!form.getFieldValue('path')) form.setFieldValue('path', form.getFieldValue('content_type') === 'post' ? joinPath(settingsForm.getFieldValue('blog_path') || '/blog', nextSlug) : pathify(title))
             }} /></Form.Item>
             <Space className="routeGrid" align="start">
               <Form.Item name="slug" label="Admin slug" rules={[{required:true}]}><Input addonBefore="id:" /></Form.Item>
               <Form.Item name="path" label="Public route / SEO URL" rules={[{required:true}]}><Input placeholder="/about/company" /></Form.Item>
-              <Form.Item name="content_type" label="Type" rules={[{required:true}]}><Select options={[{label:'Page', value:'page'}, {label:'Post', value:'post'}]} /></Form.Item>
+              <Form.Item name="content_type" label="Type" rules={[{required:true}]}><Select onChange={updateContentType} options={[{label:'Page', value:'page'}, {label:'Post', value:'post'}]} /></Form.Item>
               <Form.Item name="published" label="Published" valuePropName="checked"><Switch /></Form.Item>
+              <Form.Item name="published_at" label="Published date"><Input placeholder="2026-06-02 or 2026-06-02T12:00:00Z" /></Form.Item>
             </Space>
             <Form.Item name="meta_description" label="SEO description"><Input.TextArea rows={2} maxLength={180} showCount placeholder="Short search/social description for this route." /></Form.Item>
             <Form.Item name="tags" label="Tags"><Input placeholder="news, services, security" /></Form.Item>
@@ -551,6 +610,19 @@ function Root() {
           <Modal title="Browse uploads" open={mediaOpen} onCancel={() => setMediaOpen(false)} footer={null} width={920} className="mediaModal">
             <MediaBrowser assets={assets} loading={loadingAssets} onInsert={insertAsset} onDelete={confirmDeleteAsset} onRefresh={() => loadAssets().catch((e:any) => message.error(e.message))} uploadProps={mediaUploadProps} />
           </Modal>
+          <Modal title="Page history" open={historyOpen} onCancel={() => setHistoryOpen(false)} footer={null} width={840}>
+            <List
+              loading={loadingRevisions}
+              dataSource={pageRevisions}
+              locale={{ emptyText: 'No saved revisions for this page.' }}
+              renderItem={revision => <List.Item actions={[<Button key="restore" onClick={() => restoreRevision(revision)}>Load</Button>]}>
+                <List.Item.Meta
+                  title={revision.title}
+                  description={`${revision.created_at} · ${revision.path} · ${revision.content_type}${revision.published ? '' : ' · draft'}`}
+                />
+              </List.Item>}
+            />
+          </Modal>
         </Card> },
         { key:'media', label:'Media', children:<Card className="editorCard">
           <Space className="topbar" align="start">
@@ -566,7 +638,7 @@ function Root() {
           <MediaBrowser assets={assets} loading={loadingAssets} onInsert={insertAsset} onDelete={confirmDeleteAsset} onRefresh={() => loadAssets().catch((e:any) => message.error(e.message))} uploadProps={mediaUploadProps} />
         </Card> },
         { key:'site', label:'Site', children:<Card className="editorCard">
-          <Form form={settingsForm} layout="vertical" onFinish={() => saveSettings()} initialValues={{site_name:'UvooMiniCMS', default_theme:'light', public_theme_style:'soft', public_primary_color:'#386bc0', public_secondary_color:'#64748b', public_header_style:'neutral', admin_theme:'light', theme_style:'soft', admin_primary_color:'#386bc0', admin_secondary_color:'#64748b', admin_palette:'slate', nav_layout:'top', footer_markdown:'', logo_enabled:true, favicon_enabled:true, menu_enabled:true, footer_enabled:true, theme_toggle_enabled:true, icons_enabled:true, search_enabled:true, menu:[{id:'home', type:'link', parent_id:'', label:'Home', url:'/', external:false, enabled:true}]}}>
+          <Form form={settingsForm} layout="vertical" onFinish={() => saveSettings()} initialValues={{site_name:'UvooMiniCMS', default_theme:'light', public_theme_style:'soft', public_primary_color:'#386bc0', public_secondary_color:'#64748b', public_header_style:'neutral', admin_theme:'light', theme_style:'soft', admin_primary_color:'#386bc0', admin_secondary_color:'#64748b', admin_palette:'slate', nav_layout:'top', footer_markdown:'', logo_enabled:true, favicon_enabled:true, menu_enabled:true, footer_enabled:true, theme_toggle_enabled:true, icons_enabled:true, search_enabled:true, blog_enabled:false, blog_path:'/blog', blog_title:'Blog', blog_menu_enabled:true, blog_posts_per_page:20, revision_history_limit:0, menu:[{id:'home', type:'link', parent_id:'', label:'Home', url:'/', external:false, enabled:true}]}}>
             <Space className="topbar" align="start">
               <div>
                 <Typography.Title level={3}>Site settings</Typography.Title>
@@ -611,6 +683,17 @@ function Root() {
             </div>
             <Form.Item name="default_theme" label="Public default theme"><Select onChange={value => setPublicTheme(value)} options={[{label:'Light', value:'light'}, {label:'Dark', value:'dark'}]} /></Form.Item>
             <Form.Item name="nav_layout" label="Public navigation layout"><Select options={[{label:'Top menu', value:'top'}, {label:'Side drawer', value:'side'}]} /></Form.Item>
+            <Typography.Title level={4}>Blog</Typography.Title>
+            <Space className="switchGrid" wrap>
+              <Form.Item name="blog_enabled" label="Blog route" valuePropName="checked"><Switch /></Form.Item>
+              <Form.Item name="blog_menu_enabled" label="Add Blog menu item" valuePropName="checked"><Switch /></Form.Item>
+              <Form.Item name="blog_posts_per_page" label="Posts per page"><Input type="number" min={1} max={100} /></Form.Item>
+              <Form.Item name="revision_history_limit" label="Revisions per page"><Input type="number" min={0} max={100} /></Form.Item>
+            </Space>
+            <Space className="routeGrid" align="start">
+              <Form.Item name="blog_title" label="Blog menu/title"><Input placeholder="Blog" /></Form.Item>
+              <Form.Item name="blog_path" label="Blog route"><Input placeholder="/blog" /></Form.Item>
+            </Space>
             <Typography.Title level={4}>Top menu</Typography.Title>
             <Form.List name="menu">{(fields, { add, remove }) => <>
               {fields.map(field => <Space key={field.key} className="menuRow" align="start">

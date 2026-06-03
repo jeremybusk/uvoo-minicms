@@ -8,8 +8,23 @@ export type Page = {
   markdown?:string
   tags:string
   published:boolean
+  published_at:string
   created_at:string
   updated_at:string
+}
+export type PageRevision = {
+  id:number
+  page_id:number
+  slug:string
+  path:string
+  title:string
+  meta_description:string
+  content_type:'page'|'post'
+  markdown:string
+  tags:string
+  published:boolean
+  published_at:string
+  created_at:string
 }
 export type NavItem = { id:string; type?:'link'|'section'; parent_id:string; label:string; url:string; external:boolean; enabled:boolean }
 export type Asset = { id:number; name:string; url:string; size:number; created_at:string }
@@ -47,6 +62,12 @@ export type SiteSettings = {
   icons_enabled:boolean
   search_enabled:boolean
   nav_layout:'top'|'side'
+  blog_enabled:boolean
+  blog_path:string
+  blog_title:string
+  blog_menu_enabled:boolean
+  blog_posts_per_page:number
+  revision_history_limit:number
 }
 export type ThemeHistory = {
   id:number
@@ -110,6 +131,7 @@ export const api = {
   listPages: () => rpc<{pages:Page[]}>('ListPages'),
   getPage: (slug:string) => rpc<{page:Page}>('GetPage', { slug }),
   savePage: (page: Partial<Page>) => rpc<{page:Page}>('SavePage', page),
+  listPageRevisions: (slug:string) => rpc<{revisions:PageRevision[]}>('ListPageRevisions', { slug }),
   deletePage: (slug:string) => rpc<{ok:boolean}>('DeletePage', { slug }),
   getSettings: () => rpc<{settings:SiteSettings}>('GetSettings'),
   saveSettings: (settings: SiteSettings) => rpc<{settings:SiteSettings}>('SaveSettings', settings),
