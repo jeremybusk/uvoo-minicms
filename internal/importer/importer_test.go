@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"uvoominicms/internal/db"
+	"uvoo-minicms/internal/db"
 )
 
 func TestPreviewWordPressImportsPagesPostsAndMenu(t *testing.T) {

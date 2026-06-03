@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 set -eu
 
-ENV_FILE=/etc/uvoominicms/uvoominicms.env
-STATE_DIR=/run/uvoominicms
+ENV_FILE=/etc/uvoo-minicms/uvoo-minicms.env
+STATE_DIR=/run/uvoo-minicms
 WAS_ACTIVE_FILE=$STATE_DIR/was-active
 GENERATED_PASS=
 
@@ -26,7 +26,7 @@ ensure_password() {
     pass="$(random_password)"
     tmp="${ENV_FILE}.tmp.$$"
     sed "s/^CMS_ADMIN_PASS=.*/CMS_ADMIN_PASS=$pass/" "$ENV_FILE" > "$tmp"
-    install -m 0640 -o root -g uvoominicms "$tmp" "$ENV_FILE"
+    install -m 0640 -o root -g uvoo-minicms "$tmp" "$ENV_FILE"
     rm -f "$tmp"
     GENERATED_PASS="$pass"
     return 0
@@ -39,29 +39,29 @@ ensure_password() {
   fi
 }
 
-mkdir -p /etc/uvoominicms /var/lib/uvoominicms/uploads "$STATE_DIR"
-chown -R uvoominicms:uvoominicms /var/lib/uvoominicms
-chmod 0750 /var/lib/uvoominicms /var/lib/uvoominicms/uploads
-chown root:uvoominicms /etc/uvoominicms || true
-chmod 0750 /etc/uvoominicms || true
+mkdir -p /etc/uvoo-minicms /var/lib/uvoo-minicms/uploads "$STATE_DIR"
+chown -R uvoo-minicms:uvoo-minicms /var/lib/uvoo-minicms
+chmod 0750 /var/lib/uvoo-minicms /var/lib/uvoo-minicms/uploads
+chown root:uvoo-minicms /etc/uvoo-minicms || true
+chmod 0750 /etc/uvoo-minicms || true
 
 ensure_password
-[ -f "$ENV_FILE" ] && chown root:uvoominicms "$ENV_FILE" && chmod 0640 "$ENV_FILE"
+[ -f "$ENV_FILE" ] && chown root:uvoo-minicms "$ENV_FILE" && chmod 0640 "$ENV_FILE"
 
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload || true
-  systemctl enable uvoominicms.service || true
+  systemctl enable uvoo-minicms.service || true
   if [ -f "$WAS_ACTIVE_FILE" ]; then
-    systemctl restart uvoominicms.service || true
+    systemctl restart uvoo-minicms.service || true
     rm -f "$WAS_ACTIVE_FILE"
   else
-    systemctl start uvoominicms.service || true
+    systemctl start uvoo-minicms.service || true
   fi
 fi
 
 if [ -n "$GENERATED_PASS" ]; then
   cat <<MSG
-UvooMiniCMS installed and started.
+Uvoo-MiniCMS installed and started.
 
 Generated a strong admin password in:
   $ENV_FILE
@@ -73,7 +73,7 @@ Admin login:
 MSG
 else
   cat <<MSG
-UvooMiniCMS installed and started.
+Uvoo-MiniCMS installed and started.
 
 Admin credentials are configured in:
   $ENV_FILE

@@ -1,6 +1,6 @@
 # Content Authoring
 
-UvooMiniCMS renders public pages from Markdown and supports a small set of safe shortcodes for richer content. Raw HTML is escaped by default, so use these shortcodes instead of pasting iframe HTML.
+Uvoo-MiniCMS renders public pages from Markdown and supports a small set of safe shortcodes for richer content. Raw HTML is escaped by default, so use these shortcodes instead of pasting iframe HTML.
 
 ## Video Embeds
 

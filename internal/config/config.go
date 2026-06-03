@@ -47,7 +47,7 @@ func Load() Config {
 		AllowedCountries:  upperCSV("CMS_ALLOW_COUNTRIES"),
 		DeniedCountries:   upperCSV("CMS_DENY_COUNTRIES"),
 		MaxUploadBytes:    int64Env("CMS_MAX_UPLOAD_BYTES", 25<<20),
-		PublicSiteName:    env("CMS_SITE_NAME", "UvooMiniCMS"),
+		PublicSiteName:    env("CMS_SITE_NAME", "Uvoo-MiniCMS"),
 		TLSCertFile:       os.Getenv("CMS_TLS_CERT"),
 		TLSKeyFile:        os.Getenv("CMS_TLS_KEY"),
 	}

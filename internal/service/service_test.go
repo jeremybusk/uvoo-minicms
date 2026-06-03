@@ -16,7 +16,7 @@ import (
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
-	"uvoominicms/internal/db"
+	"uvoo-minicms/internal/db"
 )
 
 func TestSetSiteImageOptimizesLogoAndFavicon(t *testing.T) {

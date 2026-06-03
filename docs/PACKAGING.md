@@ -1,6 +1,6 @@
 # Packaging
 
-UvooMiniCMS supports two local packaging paths:
+Uvoo-MiniCMS supports two local packaging paths:
 
 - `scripts/package.sh` creates a tarball-style Linux archive.
 - `scripts/package-linux.sh` creates distro packages with nFPM, usually `.deb` and `.rpm`.
@@ -54,7 +54,7 @@ make package-linux
 If the working tree is dirty, `git describe --dirty` appends `-dirty`, and the package script converts it into a package-safe version. For example:
 
 ```text
-packaging uvoominicms version 0.0.35+git.a607267.dirty from source version a607267-dirty
+packaging uvoo-minicms version 0.0.35+git.a607267.dirty from source version a607267-dirty
 ```
 
 You can also force a snapshot version explicitly:
@@ -81,7 +81,7 @@ This produces package versions like `0.1.0`, which are easier to reason about th
 For Debian packages:
 
 ```bash
-dpkg-deb -I dist/uvoominicms_*.deb | sed -n '1,80p'
+dpkg-deb -I dist/uvoo-minicms_*.deb | sed -n '1,80p'
 ```
 
 Check that the `Version:` field starts with a digit.
@@ -89,7 +89,7 @@ Check that the `Version:` field starts with a digit.
 For RPM packages:
 
 ```bash
-rpm -qp --queryformat '%{NAME} %{VERSION}-%{RELEASE}\n' dist/uvoominicms_*.rpm
+rpm -qp --queryformat '%{NAME} %{VERSION}-%{RELEASE}\n' dist/uvoo-minicms_*.rpm
 ```
 
 ## Install or Upgrade
@@ -97,20 +97,20 @@ rpm -qp --queryformat '%{NAME} %{VERSION}-%{RELEASE}\n' dist/uvoominicms_*.rpm
 Install a local Debian package with:
 
 ```bash
-sudo apt install ./dist/uvoominicms_<version>_amd64.deb
+sudo apt install ./dist/uvoo-minicms_<version>_amd64.deb
 ```
 
 Install a local RPM package with:
 
 ```bash
-sudo rpm -Uvh dist/uvoominicms_<version>_amd64.rpm
+sudo rpm -Uvh dist/uvoo-minicms_<version>_amd64.rpm
 ```
 
 The package installs:
 
-- `/usr/bin/uvoominicms`
-- `/usr/share/uvoominicms/web/dist`
-- `/etc/uvoominicms/uvoominicms.env`
-- `/var/lib/uvoominicms`
-- `uvoominicms.service`
+- `/usr/bin/uvoo-minicms`
+- `/usr/share/uvoo-minicms/web/dist`
+- `/etc/uvoo-minicms/uvoo-minicms.env`
+- `/var/lib/uvoo-minicms`
+- `uvoo-minicms.service`
 

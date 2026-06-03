@@ -1,4 +1,4 @@
-# UvooMiniCMS
+# Uvoo-MiniCMS
 
 A deliberately small Hugo/WordPress-like CMS:
 
@@ -25,7 +25,7 @@ A deliberately small Hugo/WordPress-like CMS:
 ## Layout
 
 ```text
-cmd/uvoominicms/           server entrypoint
+cmd/uvoo-minicms/           server entrypoint
 cmsv1connect/          tiny hand-written connect-go bindings using protobuf Struct
 internal/auth/         Basic Auth + IP filter middleware
 internal/config/       environment config
@@ -58,27 +58,27 @@ For a tiny tarball-style install, build the admin UI and a native Go binary on t
 
 ```bash
 ./scripts/build.sh
-./bin/uvoominicms
+./bin/uvoo-minicms
 ```
 
 To create a redistributable archive:
 
 ```bash
 ./scripts/package.sh
-# creates dist/uvoominicms-<version>-linux-<arch>.tar.gz
+# creates dist/uvoo-minicms-<version>-linux-<arch>.tar.gz
 ```
 
 A user can run the archive like this:
 
 ```bash
-tar -xzf uvoominicms-*.tar.gz
-cd uvoominicms-*
+tar -xzf uvoo-minicms-*.tar.gz
+cd uvoo-minicms-*
 cp .env.example .env
 # edit CMS_ADMIN_PASS
 ./run.sh
 ```
 
-The binary must be built for the same Linux libc family it will run on. Copying `/app/uvoominicms` out of the Alpine Docker image can fail on Ubuntu/Debian with `cannot execute: required file not found` because that container binary expects Alpine musl libraries. Use `scripts/package.sh` on the target distro, or publish separate distro-compatible tarballs.
+The binary must be built for the same Linux libc family it will run on. Copying `/app/uvoo-minicms` out of the Alpine Docker image can fail on Ubuntu/Debian with `cannot execute: required file not found` because that container binary expects Alpine musl libraries. Use `scripts/package.sh` on the target distro, or publish separate distro-compatible tarballs.
 
 ## Linux deb/rpm Packages
 
@@ -102,29 +102,29 @@ FORMATS=rpm make package-linux
 
 The packages install:
 
-- binary: `/usr/bin/uvoominicms`
-- web assets: `/usr/share/uvoominicms/web/dist`
-- config: `/etc/uvoominicms/uvoominicms.env`
-- data/uploads: `/var/lib/uvoominicms`
-- systemd unit: `uvoominicms.service`
+- binary: `/usr/bin/uvoo-minicms`
+- web assets: `/usr/share/uvoo-minicms/web/dist`
+- config: `/etc/uvoo-minicms/uvoo-minicms.env`
+- data/uploads: `/var/lib/uvoo-minicms`
+- systemd unit: `uvoo-minicms.service`
 
-The package creates a locked-down `uvoominicms` system user, generates a strong `CMS_ADMIN_PASS` when the packaged default is still present, enables the systemd service, and starts it automatically. The generated password is printed during install and stored in:
+The package creates a locked-down `uvoo-minicms` system user, generates a strong `CMS_ADMIN_PASS` when the packaged default is still present, enables the systemd service, and starts it automatically. The generated password is printed during install and stored in:
 
 ```text
-/etc/uvoominicms/uvoominicms.env
+/etc/uvoo-minicms/uvoo-minicms.env
 ```
 
 Show it with:
 
 ```bash
-sudo grep ^CMS_ADMIN_PASS= /etc/uvoominicms/uvoominicms.env
+sudo grep ^CMS_ADMIN_PASS= /etc/uvoo-minicms/uvoo-minicms.env
 ```
 
 On upgrade, the package preserves the existing config and restarts the service. To rotate the admin password later, edit `CMS_ADMIN_PASS` and restart:
 
 ```bash
-sudo editor /etc/uvoominicms/uvoominicms.env
-sudo systemctl restart uvoominicms
+sudo editor /etc/uvoo-minicms/uvoo-minicms.env
+sudo systemctl restart uvoo-minicms
 ```
 
 ## Docker
@@ -140,14 +140,14 @@ The Docker build uses the committed `web/package-lock.json` with `npm ci` for re
 Use modern Compose (`docker compose`, with a space). The old Python `docker-compose` v1.29.x can fail during container recreation with `KeyError: 'ContainerConfig'` on newer Docker engines. If you hit that, run:
 
 ```bash
-docker compose up -d --force-recreate --remove-orphans uvoominicms
+docker compose up -d --force-recreate --remove-orphans uvoo-minicms
 ```
 
 The Makefile also includes `make docker-up`, `make docker-build`, and `make docker-down` wrappers that use modern Compose.
 
 ## Content Model
 
-UvooMiniCMS keeps the editing model intentionally small:
+Uvoo-MiniCMS keeps the editing model intentionally small:
 
 - `Admin slug` is the stable admin identifier used by API calls.
 - `Public route / SEO URL` is the published path visitors see, for example `/about/company`.
@@ -214,13 +214,13 @@ Icon names map to Font Awesome solid classes, so `{{icon:rocket}}` becomes `fa-s
 | Variable | Default | Notes |
 |---|---:|---|
 | `CMS_ADDR` | `:8080` | Listen address. |
-| `CMS_SITE_NAME` | `UvooMiniCMS` | Public site name. |
+| `CMS_SITE_NAME` | `Uvoo-MiniCMS` | Public site name. |
 | `CMS_ADMIN_USER` | `admin` | Basic Auth username. |
 | `CMS_ADMIN_PASS` | `change-me` | Basic Auth password. Change this. |
 | `CMS_DATA_DIR` | `./data` | Data root. |
 | `CMS_DB` | `./data/cms.db` | SQLite DB path. |
 | `CMS_UPLOAD_DIR` | `./data/uploads` | Upload directory. |
-| `CMS_WEB_ROOT` | `web/dist` | Admin React build directory. Package installs normally use `/usr/share/uvoominicms/web/dist`. |
+| `CMS_WEB_ROOT` | `web/dist` | Admin React build directory. Package installs normally use `/usr/share/uvoo-minicms/web/dist`. |
 | `CMS_MAX_UPLOAD_BYTES` | `26214400` | Max upload size. |
 | `CMS_TLS_CERT` | empty | TLS certificate file. Requires `CMS_TLS_KEY`; enables HTTPS when both are set. |
 | `CMS_TLS_KEY` | empty | TLS private key file. Requires `CMS_TLS_CERT`. |
@@ -234,8 +234,8 @@ Icon names map to Font Awesome solid classes, so `{{icon:rocket}}` becomes `fa-s
 Common CLI flags mirror the most useful env vars:
 
 ```bash
-uvoominicms -addr :8443 -db ./data/cms.db -uploads ./data/uploads \
-  -web-root /usr/share/uvoominicms/web/dist \
+uvoo-minicms -addr :8443 -db ./data/cms.db -uploads ./data/uploads \
+  -web-root /usr/share/uvoo-minicms/web/dist \
   -admin-user admin -admin-pass 'change-me' \
   -allow-cidrs '203.0.113.10/32,2001:db8::/32' \
   -maxmind-db ./GeoLite2-Country.mmdb -allow-countries US,CA \
@@ -245,8 +245,8 @@ uvoominicms -addr :8443 -db ./data/cms.db -uploads ./data/uploads \
 Multiple instances can share the same packaged admin React build by pointing each process at the package web root while keeping instance state separate:
 
 ```bash
-uvoominicms -addr :8082 -db /var/lib/uvoominicms/site-a/cms.db -uploads /var/lib/uvoominicms/site-a/uploads -web-root /usr/share/uvoominicms/web/dist
-uvoominicms -addr :8083 -db /var/lib/uvoominicms/site-b/cms.db -uploads /var/lib/uvoominicms/site-b/uploads -web-root /usr/share/uvoominicms/web/dist
+uvoo-minicms -addr :8082 -db /var/lib/uvoo-minicms/site-a/cms.db -uploads /var/lib/uvoo-minicms/site-a/uploads -web-root /usr/share/uvoo-minicms/web/dist
+uvoo-minicms -addr :8083 -db /var/lib/uvoo-minicms/site-b/cms.db -uploads /var/lib/uvoo-minicms/site-b/uploads -web-root /usr/share/uvoo-minicms/web/dist
 ```
 
 ## Security ACLs

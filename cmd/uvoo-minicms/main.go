@@ -7,14 +7,14 @@ import (
 	"path/filepath"
 	"time"
 
-	"uvoominicms/cmsv1connect"
-	"uvoominicms/internal/acl"
-	"uvoominicms/internal/auth"
-	"uvoominicms/internal/config"
-	"uvoominicms/internal/db"
-	"uvoominicms/internal/geo"
-	"uvoominicms/internal/service"
-	"uvoominicms/internal/web"
+	"uvoo-minicms/cmsv1connect"
+	"uvoo-minicms/internal/acl"
+	"uvoo-minicms/internal/auth"
+	"uvoo-minicms/internal/config"
+	"uvoo-minicms/internal/db"
+	"uvoo-minicms/internal/geo"
+	"uvoo-minicms/internal/service"
+	"uvoo-minicms/internal/web"
 )
 
 func main() {
@@ -49,7 +49,7 @@ func main() {
 		log.Fatal("both TLS cert and key must be provided")
 	}
 	srv := &http.Server{Addr: cfg.Addr, Handler: secureHeaders(mux), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 4 * time.Minute, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 1 << 20}
-	log.Printf("uvoominicms listening on %s db=%s uploads=%s web-root=%s tls=%t", cfg.Addr, cfg.DBPath, filepath.Clean(cfg.UploadDir), filepath.Clean(cfg.WebRoot), tlsEnabled)
+	log.Printf("uvoo-minicms listening on %s db=%s uploads=%s web-root=%s tls=%t", cfg.Addr, cfg.DBPath, filepath.Clean(cfg.UploadDir), filepath.Clean(cfg.WebRoot), tlsEnabled)
 	if tlsEnabled {
 		log.Fatal(srv.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile))
 	}

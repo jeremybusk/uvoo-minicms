@@ -1,6 +1,6 @@
 # Navigation Menus
 
-UvooMiniCMS supports nested public navigation items. Menu items are managed from the admin `Site` tab.
+Uvoo-MiniCMS supports nested public navigation items. Menu items are managed from the admin `Site` tab.
 
 ## Item Types
 

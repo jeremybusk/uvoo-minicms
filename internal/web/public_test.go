@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"uvoominicms/internal/db"
+	"uvoo-minicms/internal/db"
 )
 
 func TestYouTubeID(t *testing.T) {

@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"golang.org/x/net/html"
-	"uvoominicms/internal/db"
+	"uvoo-minicms/internal/db"
 )
 
 const defaultMaxPages = 100
@@ -1065,7 +1065,7 @@ func (i Importer) getBytes(ctx context.Context, rawURL string) ([]byte, string, 
 	if err != nil {
 		return nil, "", err
 	}
-	req.Header.Set("User-Agent", "UvooMiniCMS Importer/1.0")
+	req.Header.Set("User-Agent", "Uvoo-MiniCMS Importer/1.0")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml,application/json,text/xml;q=0.9,*/*;q=0.8")
 	req.Header.Set("Accept-Encoding", "gzip")
 	resp, err := client.Do(req)
