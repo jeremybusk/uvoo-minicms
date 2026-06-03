@@ -46,6 +46,49 @@ func (p *Public) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if routePath == "/" {
 		routePath = "/"
 	}
+	menu := menuWithBlog(settings)
+	if settings.BlogEnabled && cleanNavPath(routePath) == cleanNavPath(settings.BlogPath) {
+		posts, err := p.Store.ListPublishedPosts(r.Context(), settings.BlogPostsPerPage)
+		if err != nil {
+			http.Error(w, "blog error", 500)
+			return
+		}
+		footer, err := p.renderFooter(settings)
+		if err != nil {
+			http.Error(w, "render error", 500)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_ = publicTpl.Execute(w, map[string]any{
+			"SiteName":             settings.SiteName,
+			"Title":                settings.BlogTitle,
+			"MetaDescription":      "",
+			"Body":                 renderBlogIndex(settings, posts),
+			"Footer":               footer,
+			"MenuHTML":             renderMenu(menu, routePath),
+			"NavMenuStyle":         template.HTML(navMenuStyle()),
+			"SearchHTML":           "",
+			"LogoURL":              settings.LogoURL,
+			"FaviconURL":           settings.FaviconURL,
+			"DefaultTheme":         settings.DefaultTheme,
+			"PublicThemeStyle":     settings.PublicThemeStyle,
+			"PublicPrimaryColor":   settings.PublicPrimaryColor,
+			"PublicSecondaryColor": settings.PublicSecondaryColor,
+			"PublicHeaderStyle":    settings.PublicHeaderStyle,
+			"HeaderClass":          publicHeaderClass(settings.PublicHeaderStyle),
+			"LogoEnabled":          settings.LogoEnabled,
+			"FaviconEnabled":       settings.FaviconEnabled,
+			"MenuEnabled":          settings.MenuEnabled,
+			"FooterEnabled":        settings.FooterEnabled,
+			"ThemeToggleEnabled":   settings.ThemeToggleEnabled,
+			"IconsEnabled":         settings.IconsEnabled,
+			"SearchEnabled":        settings.SearchEnabled,
+			"NavLayout":            settings.NavLayout,
+			"SideNav":              settings.NavLayout == "side",
+			"HasMermaid":           false,
+		})
+		return
+	}
 	page, err := p.Store.GetPublishedByPath(r.Context(), routePath)
 	if err != nil {
 		http.NotFound(w, r)
@@ -58,7 +101,7 @@ func (p *Public) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	var footer template.HTML
 	if settings.FooterEnabled {
-		footer, err = p.render(settings.FooterMarkdown)
+		footer, err = p.renderFooter(settings)
 		if err != nil {
 			http.Error(w, "render error", 500)
 			return
@@ -71,7 +114,7 @@ func (p *Public) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"MetaDescription":      page.MetaDescription,
 		"Body":                 body,
 		"Footer":               footer,
-		"MenuHTML":             renderMenu(settings.Menu, routePath),
+		"MenuHTML":             renderMenu(menu, routePath),
 		"NavMenuStyle":         template.HTML(navMenuStyle()),
 		"SearchHTML":           "",
 		"LogoURL":              settings.LogoURL,
@@ -120,7 +163,7 @@ func (p *Public) serveSearch(w http.ResponseWriter, r *http.Request, settings db
 		"Title":                "Search",
 		"Body":                 template.HTML(b.String()),
 		"Footer":               template.HTML(""),
-		"MenuHTML":             renderMenu(settings.Menu, "/search"),
+		"MenuHTML":             renderMenu(menuWithBlog(settings), "/search"),
 		"NavMenuStyle":         template.HTML(navMenuStyle()),
 		"LogoURL":              settings.LogoURL,
 		"FaviconURL":           settings.FaviconURL,
@@ -140,6 +183,67 @@ func (p *Public) serveSearch(w http.ResponseWriter, r *http.Request, settings db
 		"NavLayout":            settings.NavLayout,
 		"SideNav":              settings.NavLayout == "side",
 	})
+}
+
+func (p *Public) renderFooter(settings db.Settings) (template.HTML, error) {
+	if !settings.FooterEnabled {
+		return "", nil
+	}
+	return p.render(settings.FooterMarkdown)
+}
+
+func renderBlogIndex(settings db.Settings, posts []db.Page) template.HTML {
+	var b strings.Builder
+	title := firstNonEmpty(settings.BlogTitle, "Blog")
+	fmt.Fprintf(&b, `<h1>%s</h1>`, template.HTMLEscapeString(title))
+	if len(posts) == 0 {
+		b.WriteString(`<p class="muted">No published posts yet.</p>`)
+		return template.HTML(b.String())
+	}
+	b.WriteString(`<div class="resultList">`)
+	for _, post := range posts {
+		fmt.Fprintf(&b, `<a class="result" href="%s"><span>%s</span><strong>%s</strong><small>%s</small></a>`,
+			template.HTMLEscapeString(post.Path),
+			template.HTMLEscapeString(blogDate(post)),
+			template.HTMLEscapeString(post.Title),
+			template.HTMLEscapeString(firstNonEmpty(post.MetaDescription, post.Tags, post.Path)),
+		)
+	}
+	b.WriteString(`</div>`)
+	return template.HTML(b.String())
+}
+
+func blogDate(post db.Page) string {
+	value := firstNonEmpty(post.PublishedAt, post.CreatedAt)
+	if len(value) >= len("2006-01-02") {
+		return value[:len("2006-01-02")]
+	}
+	return "Post"
+}
+
+func menuWithBlog(settings db.Settings) []db.NavItem {
+	if !settings.BlogEnabled || !settings.BlogMenuEnabled {
+		return settings.Menu
+	}
+	blogPath := cleanNavPath(firstNonEmpty(settings.BlogPath, "/blog"))
+	for _, item := range settings.Menu {
+		if !item.Enabled || item.Type == "section" || item.External {
+			continue
+		}
+		u, err := url.Parse(item.URL)
+		if err == nil && !u.IsAbs() && cleanNavPath(u.Path) == blogPath {
+			return settings.Menu
+		}
+	}
+	menu := append([]db.NavItem{}, settings.Menu...)
+	menu = append(menu, db.NavItem{
+		ID:      "blog",
+		Type:    "link",
+		Label:   firstNonEmpty(settings.BlogTitle, "Blog"),
+		URL:     blogPath,
+		Enabled: true,
+	})
+	return menu
 }
 
 func (p *Public) render(markdown string) (template.HTML, error) {

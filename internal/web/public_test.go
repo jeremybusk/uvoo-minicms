@@ -2,7 +2,10 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"html/template"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -141,5 +144,53 @@ func TestPublicTemplateSideNavDoesNotRenderHiddenTopMenu(t *testing.T) {
 	}
 	if count := strings.Count(html, `id="nav-sub-services"`); count != 1 {
 		t.Fatalf("expected one submenu id in side nav mode, got %d in %s", count, html)
+	}
+}
+
+func TestPublicBlogRouteListsPublishedPosts(t *testing.T) {
+	store, err := db.Open(t.TempDir() + "/cms.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.DB.Close()
+	ctx := context.Background()
+	settings, err := store.GetSettings(ctx, "Demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.BlogEnabled = true
+	settings.BlogPath = "/blog"
+	settings.BlogTitle = "News"
+	settings.BlogMenuEnabled = true
+	if _, err := store.SaveSettings(ctx, settings); err != nil {
+		t.Fatal(err)
+	}
+	for _, page := range []db.Page{
+		{Slug: "new", Path: "/blog/new", Title: "New Post", ContentType: "post", Published: true, PublishedAt: "2026-02-01"},
+		{Slug: "old", Path: "/blog/old", Title: "Old Post", ContentType: "post", Published: true, PublishedAt: "2026-01-01"},
+		{Slug: "draft", Path: "/blog/draft", Title: "Draft Post", ContentType: "post", Published: false},
+		{Slug: "page", Path: "/page", Title: "Regular Page", ContentType: "page", Published: true},
+	} {
+		if _, err := store.SavePage(ctx, page); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/blog", nil)
+	rec := httptest.NewRecorder()
+	NewPublic(store, "Demo").ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	html := rec.Body.String()
+	if !strings.Contains(html, "News") || !strings.Contains(html, "New Post") || !strings.Contains(html, "Old Post") {
+		t.Fatalf("expected blog posts in response, got %s", html)
+	}
+	if strings.Index(html, "New Post") > strings.Index(html, "Old Post") {
+		t.Fatalf("expected newest post first, got %s", html)
+	}
+	if strings.Contains(html, "Draft Post") || strings.Contains(html, "Regular Page") {
+		t.Fatalf("drafts and pages should not render on blog index, got %s", html)
 	}
 }

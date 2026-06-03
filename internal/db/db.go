@@ -25,8 +25,24 @@ type Page struct {
 	Tags            string `json:"tags"`
 	Markdown        string `json:"markdown,omitempty"`
 	Published       bool   `json:"published"`
+	PublishedAt     string `json:"published_at"`
 	CreatedAt       string `json:"created_at"`
 	UpdatedAt       string `json:"updated_at"`
+}
+
+type PageRevision struct {
+	ID              int64  `json:"id"`
+	PageID          int64  `json:"page_id"`
+	Slug            string `json:"slug"`
+	Path            string `json:"path"`
+	Title           string `json:"title"`
+	MetaDescription string `json:"meta_description"`
+	ContentType     string `json:"content_type"`
+	Tags            string `json:"tags"`
+	Markdown        string `json:"markdown"`
+	Published       bool   `json:"published"`
+	PublishedAt     string `json:"published_at"`
+	CreatedAt       string `json:"created_at"`
 }
 
 type Asset struct {
@@ -91,6 +107,12 @@ type Settings struct {
 	IconsEnabled         bool      `json:"icons_enabled"`
 	SearchEnabled        bool      `json:"search_enabled"`
 	NavLayout            string    `json:"nav_layout"`
+	BlogEnabled          bool      `json:"blog_enabled"`
+	BlogPath             string    `json:"blog_path"`
+	BlogTitle            string    `json:"blog_title"`
+	BlogMenuEnabled      bool      `json:"blog_menu_enabled"`
+	BlogPostsPerPage     int       `json:"blog_posts_per_page"`
+	RevisionHistoryLimit int       `json:"revision_history_limit"`
 }
 
 type ThemeHistory struct {
@@ -144,10 +166,27 @@ CREATE TABLE IF NOT EXISTS pages (
   tags TEXT NOT NULL DEFAULT '',
   markdown TEXT NOT NULL DEFAULT '',
   published INTEGER NOT NULL DEFAULT 0,
+  published_at TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 CREATE INDEX IF NOT EXISTS idx_pages_published_slug ON pages(published, slug);
+CREATE TABLE IF NOT EXISTS page_revisions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  page_id INTEGER NOT NULL,
+  slug TEXT NOT NULL,
+  path TEXT NOT NULL,
+  title TEXT NOT NULL,
+  meta_description TEXT NOT NULL DEFAULT '',
+  content_type TEXT NOT NULL DEFAULT 'page',
+  tags TEXT NOT NULL DEFAULT '',
+  markdown TEXT NOT NULL DEFAULT '',
+  published INTEGER NOT NULL DEFAULT 0,
+  published_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  FOREIGN KEY(page_id) REFERENCES pages(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_page_revisions_page ON page_revisions(page_id, created_at DESC);
 CREATE TABLE IF NOT EXISTS assets (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -208,6 +247,7 @@ WHERE NOT EXISTS (SELECT 1 FROM pages WHERE slug='home');`)
 		`ALTER TABLE pages ADD COLUMN meta_description TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE pages ADD COLUMN content_type TEXT NOT NULL DEFAULT 'page'`,
 		`ALTER TABLE pages ADD COLUMN tags TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE pages ADD COLUMN published_at TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := s.DB.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 			return err
@@ -217,12 +257,13 @@ WHERE NOT EXISTS (SELECT 1 FROM pages WHERE slug='home');`)
 UPDATE pages SET path='/' WHERE slug='home' AND path='';
 UPDATE pages SET path='/' || slug WHERE slug <> 'home' AND path='';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_pages_path ON pages(path);
-CREATE INDEX IF NOT EXISTS idx_pages_published_path ON pages(published, path);`)
+CREATE INDEX IF NOT EXISTS idx_pages_published_path ON pages(published, path);
+CREATE INDEX IF NOT EXISTS idx_pages_posts ON pages(content_type, published, published_at, created_at);`)
 	return err
 }
 
 func (s *Store) ListPages(ctx context.Context) ([]Page, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT id,slug,path,title,meta_description,content_type,tags,published,created_at,updated_at FROM pages ORDER BY updated_at DESC`)
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,slug,path,title,meta_description,content_type,tags,published,published_at,created_at,updated_at FROM pages ORDER BY updated_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +272,7 @@ func (s *Store) ListPages(ctx context.Context) ([]Page, error) {
 	for rows.Next() {
 		var p Page
 		var pub int
-		if err := rows.Scan(&p.ID, &p.Slug, &p.Path, &p.Title, &p.MetaDescription, &p.ContentType, &p.Tags, &pub, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Slug, &p.Path, &p.Title, &p.MetaDescription, &p.ContentType, &p.Tags, &pub, &p.PublishedAt, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		p.Published = pub == 1
@@ -243,7 +284,7 @@ func (s *Store) ListPages(ctx context.Context) ([]Page, error) {
 func (s *Store) GetPage(ctx context.Context, slug string) (Page, error) {
 	var p Page
 	var pub int
-	err := s.DB.QueryRowContext(ctx, `SELECT id,slug,path,title,meta_description,content_type,tags,markdown,published,created_at,updated_at FROM pages WHERE slug=?`, slug).Scan(&p.ID, &p.Slug, &p.Path, &p.Title, &p.MetaDescription, &p.ContentType, &p.Tags, &p.Markdown, &pub, &p.CreatedAt, &p.UpdatedAt)
+	err := s.DB.QueryRowContext(ctx, `SELECT id,slug,path,title,meta_description,content_type,tags,markdown,published,published_at,created_at,updated_at FROM pages WHERE slug=?`, slug).Scan(&p.ID, &p.Slug, &p.Path, &p.Title, &p.MetaDescription, &p.ContentType, &p.Tags, &p.Markdown, &pub, &p.PublishedAt, &p.CreatedAt, &p.UpdatedAt)
 	p.Published = pub == 1
 	return p, err
 }
@@ -251,22 +292,93 @@ func (s *Store) GetPage(ctx context.Context, slug string) (Page, error) {
 func (s *Store) GetPublishedByPath(ctx context.Context, path string) (Page, error) {
 	var p Page
 	var pub int
-	err := s.DB.QueryRowContext(ctx, `SELECT id,slug,path,title,meta_description,content_type,tags,markdown,published,created_at,updated_at FROM pages WHERE path=? AND published=1`, path).Scan(&p.ID, &p.Slug, &p.Path, &p.Title, &p.MetaDescription, &p.ContentType, &p.Tags, &p.Markdown, &pub, &p.CreatedAt, &p.UpdatedAt)
+	err := s.DB.QueryRowContext(ctx, `SELECT id,slug,path,title,meta_description,content_type,tags,markdown,published,published_at,created_at,updated_at FROM pages WHERE path=? AND published=1`, path).Scan(&p.ID, &p.Slug, &p.Path, &p.Title, &p.MetaDescription, &p.ContentType, &p.Tags, &p.Markdown, &pub, &p.PublishedAt, &p.CreatedAt, &p.UpdatedAt)
 	p.Published = pub == 1
 	return p, err
 }
 
 func (s *Store) SavePage(ctx context.Context, p Page) (Page, error) {
+	return s.SavePageWithRevisions(ctx, p, 0)
+}
+
+func (s *Store) SavePageWithRevisions(ctx context.Context, p Page, revisionLimit int) (Page, error) {
 	if p.Slug == "" || p.Path == "" || p.Title == "" {
 		return Page{}, errors.New("slug, path, and title required")
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err := s.DB.ExecContext(ctx, `INSERT INTO pages(slug,path,title,meta_description,content_type,tags,markdown,published,updated_at) VALUES(?,?,?,?,?,?,?,?,?)
-ON CONFLICT(slug) DO UPDATE SET path=excluded.path, title=excluded.title, meta_description=excluded.meta_description, content_type=excluded.content_type, tags=excluded.tags, markdown=excluded.markdown, published=excluded.published, updated_at=excluded.updated_at`, p.Slug, p.Path, p.Title, p.MetaDescription, p.ContentType, p.Tags, p.Markdown, boolInt(p.Published), now)
+	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return Page{}, err
 	}
+	defer tx.Rollback()
+	var existing Page
+	var pub int
+	err = tx.QueryRowContext(ctx, `SELECT id,slug,path,title,meta_description,content_type,tags,markdown,published,published_at,created_at,updated_at FROM pages WHERE slug=?`, p.Slug).Scan(&existing.ID, &existing.Slug, &existing.Path, &existing.Title, &existing.MetaDescription, &existing.ContentType, &existing.Tags, &existing.Markdown, &pub, &existing.PublishedAt, &existing.CreatedAt, &existing.UpdatedAt)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return Page{}, err
+	}
+	if err == nil && revisionLimit > 0 {
+		existing.Published = pub == 1
+		if _, err := tx.ExecContext(ctx, `INSERT INTO page_revisions(page_id,slug,path,title,meta_description,content_type,tags,markdown,published,published_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, existing.ID, existing.Slug, existing.Path, existing.Title, existing.MetaDescription, existing.ContentType, existing.Tags, existing.Markdown, boolInt(existing.Published), existing.PublishedAt, now); err != nil {
+			return Page{}, err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM page_revisions WHERE page_id=? AND id NOT IN (SELECT id FROM page_revisions WHERE page_id=? ORDER BY created_at DESC, id DESC LIMIT ?)`, existing.ID, existing.ID, revisionLimit); err != nil {
+			return Page{}, err
+		}
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO pages(slug,path,title,meta_description,content_type,tags,markdown,published,published_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)
+ON CONFLICT(slug) DO UPDATE SET path=excluded.path, title=excluded.title, meta_description=excluded.meta_description, content_type=excluded.content_type, tags=excluded.tags, markdown=excluded.markdown, published=excluded.published, published_at=excluded.published_at, updated_at=excluded.updated_at`, p.Slug, p.Path, p.Title, p.MetaDescription, p.ContentType, p.Tags, p.Markdown, boolInt(p.Published), p.PublishedAt, now)
+	if err != nil {
+		return Page{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Page{}, err
+	}
 	return s.GetPage(ctx, p.Slug)
+}
+
+func (s *Store) ListPageRevisions(ctx context.Context, slug string) ([]PageRevision, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT r.id,r.page_id,r.slug,r.path,r.title,r.meta_description,r.content_type,r.tags,r.markdown,r.published,r.published_at,r.created_at
+FROM page_revisions r JOIN pages p ON p.id=r.page_id WHERE p.slug=? ORDER BY r.created_at DESC, r.id DESC`, slug)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var revisions []PageRevision
+	for rows.Next() {
+		var r PageRevision
+		var pub int
+		if err := rows.Scan(&r.ID, &r.PageID, &r.Slug, &r.Path, &r.Title, &r.MetaDescription, &r.ContentType, &r.Tags, &r.Markdown, &pub, &r.PublishedAt, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		r.Published = pub == 1
+		revisions = append(revisions, r)
+	}
+	return revisions, rows.Err()
+}
+
+func (s *Store) ListPublishedPosts(ctx context.Context, limit int) ([]Page, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,slug,path,title,meta_description,content_type,tags,published,published_at,created_at,updated_at FROM pages
+WHERE published=1 AND content_type='post'
+ORDER BY COALESCE(NULLIF(published_at,''), created_at) DESC, created_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var posts []Page
+	for rows.Next() {
+		var p Page
+		var pub int
+		if err := rows.Scan(&p.ID, &p.Slug, &p.Path, &p.Title, &p.MetaDescription, &p.ContentType, &p.Tags, &pub, &p.PublishedAt, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, err
+		}
+		p.Published = pub == 1
+		posts = append(posts, p)
+	}
+	return posts, rows.Err()
 }
 
 func (s *Store) SearchPages(ctx context.Context, query string) ([]Page, error) {
@@ -275,7 +387,7 @@ func (s *Store) SearchPages(ctx context.Context, query string) ([]Page, error) {
 		return nil, nil
 	}
 	like := "%" + query + "%"
-	rows, err := s.DB.QueryContext(ctx, `SELECT id,slug,path,title,meta_description,content_type,tags,published,created_at,updated_at FROM pages
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,slug,path,title,meta_description,content_type,tags,published,published_at,created_at,updated_at FROM pages
 WHERE published=1 AND (title LIKE ? OR meta_description LIKE ? OR tags LIKE ? OR markdown LIKE ?)
 ORDER BY updated_at DESC LIMIT 50`, like, like, like, like)
 	if err != nil {
@@ -286,7 +398,7 @@ ORDER BY updated_at DESC LIMIT 50`, like, like, like, like)
 	for rows.Next() {
 		var p Page
 		var pub int
-		if err := rows.Scan(&p.ID, &p.Slug, &p.Path, &p.Title, &p.MetaDescription, &p.ContentType, &p.Tags, &pub, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Slug, &p.Path, &p.Title, &p.MetaDescription, &p.ContentType, &p.Tags, &pub, &p.PublishedAt, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		p.Published = pub == 1
@@ -573,6 +685,10 @@ func DefaultSettings(siteName string) Settings {
 		IconsEnabled:         true,
 		SearchEnabled:        true,
 		NavLayout:            "top",
+		BlogPath:             "/blog",
+		BlogTitle:            "Blog",
+		BlogMenuEnabled:      true,
+		BlogPostsPerPage:     20,
 		Menu: []NavItem{
 			{ID: "home", Type: "link", Label: "Home", URL: "/", External: false, Enabled: true},
 		},
@@ -580,6 +696,22 @@ func DefaultSettings(siteName string) Settings {
 }
 
 func normalizeSettings(settings *Settings) {
+	if settings.BlogPath == "" {
+		settings.BlogPath = "/blog"
+	}
+	settings.BlogPath = normalizeSettingsPath(settings.BlogPath)
+	if settings.BlogTitle == "" {
+		settings.BlogTitle = "Blog"
+	}
+	if settings.BlogPostsPerPage <= 0 || settings.BlogPostsPerPage > 100 {
+		settings.BlogPostsPerPage = 20
+	}
+	if settings.RevisionHistoryLimit < 0 {
+		settings.RevisionHistoryLimit = 0
+	}
+	if settings.RevisionHistoryLimit > 100 {
+		settings.RevisionHistoryLimit = 100
+	}
 	for i := range settings.Menu {
 		if settings.Menu[i].ID == "" {
 			settings.Menu[i].ID = fmt.Sprintf("item-%d", i+1)
@@ -592,6 +724,18 @@ func normalizeSettings(settings *Settings) {
 			settings.Menu[i].External = false
 		}
 	}
+}
+
+func normalizeSettingsPath(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "/" {
+		return "/blog"
+	}
+	value = "/" + strings.Trim(value, "/")
+	if value != "/" {
+		value = strings.TrimSuffix(value, "/")
+	}
+	return value
 }
 
 func normalizeThemeStyle(style string) string {

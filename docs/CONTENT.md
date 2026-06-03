@@ -44,6 +44,25 @@ Use **pages**, nested menus, uploads, and Markdown without a heavy page builder.
 
 Card bodies support normal Markdown.
 
+## Blog
+
+Enable the blog in **Site settings**. The blog route defaults to `/blog` and lists published pages whose type is `Post`, newest first.
+
+Common settings:
+
+- **Blog route**: public index path, for example `/blog` or `/news`.
+- **Blog menu/title**: text shown on the blog page and optional menu item.
+- **Add Blog menu item**: appends a virtual menu link when no existing menu item already points at the blog route.
+- **Posts per page**: caps the number of posts rendered on the blog index.
+
+Set a post's **Published date** to `YYYY-MM-DD` or RFC3339, such as `2026-06-02T12:00:00Z`, when you want explicit chronological ordering.
+
+## Revision History
+
+Set **Revisions per page** in **Site settings**. `0` disables revision history. When the value is above zero, saving an existing page stores the previous version before applying the new one.
+
+Use **History** in the page editor to load a previous version into the form. Loading a revision does not overwrite the current page until you press **Save**.
+
 ## Mermaid
 
 Mermaid diagrams can be written as fenced code blocks:
@@ -55,4 +74,3 @@ flowchart LR
   B --> C[Publish]
 ```
 ````
-
