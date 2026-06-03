@@ -55,7 +55,17 @@ Common settings:
 - **Add Blog menu item**: appends a virtual menu link when no existing menu item already points at the blog route.
 - **Posts per page**: caps the number of posts rendered on the blog index.
 
+Use **New post** in the admin sidebar to start a post. New post paths default under the blog route, for example `/blog/my-post`.
+
 Set a post's **Published date** to `YYYY-MM-DD` or RFC3339, such as `2026-06-02T12:00:00Z`, when you want explicit chronological ordering.
+
+The public site exposes an RSS feed at:
+
+```text
+/blog/feed.xml
+```
+
+If you change the blog route to `/news`, the feed moves to `/news/feed.xml`. Public pages include an RSS discovery link when the blog is enabled.
 
 ## Revision History
 

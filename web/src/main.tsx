@@ -24,6 +24,10 @@ function pathify(s:string) {
   const path = s.split('/').map(slugify).filter(Boolean).join('/')
   return path ? `/${path}` : '/'
 }
+function joinPath(base:string, slug:string) {
+  const cleanBase = pathify(base || '/blog').replace(/\/+$/, '')
+  return `${cleanBase || ''}/${slug}` || `/${slug}`
+}
 function freshPage() {
   return { slug:'', path:'', title:'', meta_description:'', content_type:'page', tags:'', markdown:'# Untitled\n', published:false, published_at:'' } as Page
 }
@@ -253,7 +257,12 @@ function Root() {
     setSaving(true)
     try {
       const v = form.getFieldsValue()
-      const r = await api.savePage({ ...v, slug: slugify(v.slug || v.title || ''), path: pathify(v.path || v.slug || v.title || '') })
+      const slug = slugify(v.slug || v.title || '')
+      const rootPath = slug ? `/${slug}` : ''
+      const generatedPath = v.content_type === 'post' && (!v.path || pathify(v.path) === rootPath)
+        ? joinPath(settingsForm.getFieldValue('blog_path') || '/blog', slug)
+        : pathify(v.path || v.slug || v.title || '')
+      const r = await api.savePage({ ...v, slug, path: generatedPath })
       setActive(r.page)
       form.setFieldsValue(r.page)
       setEditorRev(rev => rev + 1)
@@ -376,12 +385,24 @@ function Root() {
     form.resetFields()
     await loadPages()
   }
-  function newPage() {
+  function newPage(contentType: 'page'|'post' = 'page') {
     const p = freshPage()
+    p.content_type = contentType
+    if (contentType === 'post') {
+      p.markdown = '# New Post\n'
+    }
     setActive(p)
     form.setFieldsValue(p)
     setSourceMode(false)
     setEditorRev(rev => rev + 1)
+  }
+  function updateContentType(contentType: 'page'|'post') {
+    form.setFieldValue('content_type', contentType)
+    const slug = slugify(form.getFieldValue('slug') || form.getFieldValue('title') || '')
+    const currentPath = form.getFieldValue('path') || ''
+    if (contentType === 'post' && slug && (!currentPath || currentPath === `/${slug}`)) {
+      form.setFieldValue('path', joinPath(settingsForm.getFieldValue('blog_path') || '/blog', slug))
+    }
   }
   function currentImportOptions(): ImportOptions {
     return {
@@ -539,7 +560,10 @@ function Root() {
         <Button size="small" type={palette==='custom'?'primary':'default'} onClick={() => { setPalette('custom'); settingsForm.setFieldValue('admin_palette', 'custom') }}>custom</Button>
         <Switch checkedChildren="Dark" unCheckedChildren="Light" checked={adminDark} onChange={checked => { setAdminDark(checked); settingsForm.setFieldValue('admin_theme', checked ? 'dark' : 'light') }} />
       </Space>
-      <Button block type="primary" onClick={newPage}>New page</Button>
+      <Space direction="vertical" style={{ width: '100%' }}>
+        <Button block type="primary" onClick={() => newPage('page')}>New page</Button>
+        <Button block onClick={() => newPage('post')}>New post</Button>
+      </Space>
       <List className="pages" dataSource={pages} renderItem={p => <List.Item className={active?.slug===p.slug?'selected':''} onClick={() => openPage(p.slug)}>
         <List.Item.Meta title={p.title} description={`${p.path || `/${p.slug}`}${p.content_type === 'post' ? ' · post' : ''}${p.published ? '' : ' · draft'}`} />
       </List.Item>} />
@@ -560,13 +584,14 @@ function Root() {
             </Space>
             <Form.Item name="title" label="Title" rules={[{required:true}]}><Input onBlur={() => {
               const title = form.getFieldValue('title') || ''
-              if (!form.getFieldValue('slug')) form.setFieldValue('slug', slugify(title))
-              if (!form.getFieldValue('path')) form.setFieldValue('path', pathify(title))
+              const nextSlug = slugify(title)
+              if (!form.getFieldValue('slug')) form.setFieldValue('slug', nextSlug)
+              if (!form.getFieldValue('path')) form.setFieldValue('path', form.getFieldValue('content_type') === 'post' ? joinPath(settingsForm.getFieldValue('blog_path') || '/blog', nextSlug) : pathify(title))
             }} /></Form.Item>
             <Space className="routeGrid" align="start">
               <Form.Item name="slug" label="Admin slug" rules={[{required:true}]}><Input addonBefore="id:" /></Form.Item>
               <Form.Item name="path" label="Public route / SEO URL" rules={[{required:true}]}><Input placeholder="/about/company" /></Form.Item>
-              <Form.Item name="content_type" label="Type" rules={[{required:true}]}><Select options={[{label:'Page', value:'page'}, {label:'Post', value:'post'}]} /></Form.Item>
+              <Form.Item name="content_type" label="Type" rules={[{required:true}]}><Select onChange={updateContentType} options={[{label:'Page', value:'page'}, {label:'Post', value:'post'}]} /></Form.Item>
               <Form.Item name="published" label="Published" valuePropName="checked"><Switch /></Form.Item>
               <Form.Item name="published_at" label="Published date"><Input placeholder="2026-06-02 or 2026-06-02T12:00:00Z" /></Form.Item>
             </Space>
