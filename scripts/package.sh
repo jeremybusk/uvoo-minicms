@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_NAME="${APP_NAME:-uvoominicms}"
+APP_NAME="${APP_NAME:-uvoo-minicms}"
 VERSION="${VERSION:-$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || date -u +%Y%m%d%H%M%S)}"
 GOOS="${GOOS:-$(go env GOOS)}"
 GOARCH="${GOARCH:-$(go env GOARCH)}"
@@ -36,7 +36,7 @@ if [ -f .env ]; then
 fi
 
 : "${CMS_ADDR:=:8080}"
-: "${CMS_SITE_NAME:=UvooMiniCMS}"
+: "${CMS_SITE_NAME:=Uvoo-MiniCMS}"
 : "${CMS_ADMIN_USER:=admin}"
 : "${CMS_ADMIN_PASS:=change-me-now}"
 : "${CMS_DATA_DIR:=./data}"
@@ -47,7 +47,7 @@ fi
 export CMS_ADDR CMS_SITE_NAME CMS_ADMIN_USER CMS_ADMIN_PASS CMS_DATA_DIR CMS_DB CMS_UPLOAD_DIR CMS_WEB_ROOT
 mkdir -p "$CMS_UPLOAD_DIR"
 
-exec ./uvoominicms "$@"
+exec ./uvoo-minicms "$@"
 RUNSH
 
 chmod 0755 "$PKG_DIR/$APP_NAME" "$PKG_DIR/run.sh"

@@ -7,10 +7,10 @@ fi
 
 cat <<'MSG'
 
-UvooMiniCMS package removed.
+Uvoo-MiniCMS package removed.
 
 The service user, configuration, and data were left in place:
-  /etc/uvoominicms
-  /var/lib/uvoominicms
+  /etc/uvoo-minicms
+  /var/lib/uvoo-minicms
 
 MSG

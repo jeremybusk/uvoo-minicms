@@ -1,4 +1,4 @@
-name: uvoominicms
+name: uvoo-minicms
 arch: ${GOARCH}
 platform: linux
 version: ${VERSION}
@@ -6,23 +6,23 @@ section: web
 priority: optional
 maintainer: Uvoo <support@uvoo.io>
 description: Small SQLite-backed CMS with a Go backend and React admin UI.
-homepage: https://github.com/uvoo/uvoominicms
+homepage: https://github.com/uvoo/uvoo-minicms
 license: MIT
 contents:
-  - src: ./bin/uvoominicms
-    dst: /usr/bin/uvoominicms
+  - src: ./bin/uvoo-minicms
+    dst: /usr/bin/uvoo-minicms
     file_info:
       mode: 0755
   - src: ./web/dist
-    dst: /usr/share/uvoominicms/web/dist
+    dst: /usr/share/uvoo-minicms/web/dist
     type: tree
-  - src: ./packaging/uvoominicms.env
-    dst: /etc/uvoominicms/uvoominicms.env
+  - src: ./packaging/uvoo-minicms.env
+    dst: /etc/uvoo-minicms/uvoo-minicms.env
     type: config
     file_info:
       mode: 0640
-  - src: ./packaging/uvoominicms.service
-    dst: /usr/lib/systemd/system/uvoominicms.service
+  - src: ./packaging/uvoo-minicms.service
+    dst: /usr/lib/systemd/system/uvoo-minicms.service
     file_info:
       mode: 0644
 scripts:

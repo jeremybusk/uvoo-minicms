@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/oschwald/geoip2-golang"
-	"uvoominicms/internal/auth"
-	"uvoominicms/internal/db"
+	"uvoo-minicms/internal/auth"
+	"uvoo-minicms/internal/db"
 )
 
 type Filter struct {

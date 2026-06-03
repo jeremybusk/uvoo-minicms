@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_NAME="${APP_NAME:-uvoominicms}"
+APP_NAME="${APP_NAME:-uvoo-minicms}"
 OUT="${OUT:-$ROOT/bin/$APP_NAME}"
 
 need() {
@@ -30,7 +30,7 @@ npm run build
 
 cd "$ROOT"
 mkdir -p "$(dirname "$OUT")"
-CGO_ENABLED="${CGO_ENABLED:-1}" go build -trimpath -ldflags="-s -w" -o "$OUT" ./cmd/uvoominicms
+CGO_ENABLED="${CGO_ENABLED:-1}" go build -trimpath -ldflags="-s -w" -o "$OUT" ./cmd/uvoo-minicms
 
 echo "built $OUT"
 echo "run from the repo root with: $OUT"

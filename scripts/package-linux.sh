@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_NAME="${APP_NAME:-uvoominicms}"
+APP_NAME="${APP_NAME:-uvoo-minicms}"
 RAW_VERSION="${VERSION:-$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || date -u +%Y%m%d%H%M%S)}"
 GOOS="${GOOS:-linux}"
 GOARCH="${GOARCH:-}"

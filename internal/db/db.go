@@ -237,7 +237,7 @@ CREATE TABLE IF NOT EXISTS acl_rules (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 INSERT INTO pages(slug,title,markdown,published)
-SELECT 'home','Home','# Welcome to UvooMiniCMS\n\nEdit this page from /admin.',1
+SELECT 'home','Home','# Welcome to Uvoo-MiniCMS\n\nEdit this page from /admin.',1
 WHERE NOT EXISTS (SELECT 1 FROM pages WHERE slug='home');`)
 	if err != nil {
 		return err
@@ -662,7 +662,7 @@ func (s *Store) ListThemeHistory(ctx context.Context, limit int) ([]ThemeHistory
 
 func DefaultSettings(siteName string) Settings {
 	if siteName == "" {
-		siteName = "UvooMiniCMS"
+		siteName = "Uvoo-MiniCMS"
 	}
 	return Settings{
 		SiteName:             siteName,

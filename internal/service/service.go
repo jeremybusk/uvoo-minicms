@@ -24,8 +24,8 @@ import (
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
-	"uvoominicms/internal/db"
-	"uvoominicms/internal/importer"
+	"uvoo-minicms/internal/db"
+	"uvoo-minicms/internal/importer"
 )
 
 type Service struct {
@@ -1035,7 +1035,7 @@ func siteImageBytes(ctx context.Context, dataURL, rawURL string, maxBytes int64)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "UvooMiniCMS Admin/1.0")
+	req.Header.Set("User-Agent", "Uvoo-MiniCMS Admin/1.0")
 	req.Header.Set("Accept", "image/png,image/jpeg;q=0.9,*/*;q=0.1")
 	client := &http.Client{Timeout: 12 * time.Second}
 	resp, err := client.Do(req)

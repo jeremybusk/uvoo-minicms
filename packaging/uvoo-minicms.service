@@ -1,22 +1,22 @@
 [Unit]
-Description=UvooMiniCMS
+Description=Uvoo-MiniCMS
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=uvoominicms
-Group=uvoominicms
-WorkingDirectory=/usr/share/uvoominicms
-EnvironmentFile=-/etc/uvoominicms/uvoominicms.env
-ExecStart=/usr/bin/uvoominicms
+User=uvoo-minicms
+Group=uvoo-minicms
+WorkingDirectory=/usr/share/uvoo-minicms
+EnvironmentFile=-/etc/uvoo-minicms/uvoo-minicms.env
+ExecStart=/usr/bin/uvoo-minicms
 Restart=on-failure
 RestartSec=5s
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true
-ReadWritePaths=/var/lib/uvoominicms
+ReadWritePaths=/var/lib/uvoo-minicms
 
 [Install]
 WantedBy=multi-user.target
