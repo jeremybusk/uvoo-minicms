@@ -7,7 +7,7 @@ priority: optional
 maintainer: Uvoo <support@uvoo.io>
 description: Small SQLite-backed CMS with a Go backend and React admin UI.
 homepage: https://github.com/uvoo/uvoo-minicms
-license: MIT
+license: Apache-2.0
 contents:
   - src: ./bin/uvoo-minicms
     dst: /usr/bin/uvoo-minicms

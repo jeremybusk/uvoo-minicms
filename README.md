@@ -133,6 +133,18 @@ sudo editor /etc/uvoo-minicms/uvoo-minicms.env
 sudo systemctl restart uvoo-minicms
 ```
 
+## License
+
+Uvoo-MiniCMS is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
+
+Before publishing releases or adding new third-party code/assets, run:
+
+```bash
+make license-check
+```
+
+See [docs/LICENSE_AUDIT.md](docs/LICENSE_AUDIT.md) for scanner setup and the dependency license review process.
+
 ## Docker
 
 ```bash

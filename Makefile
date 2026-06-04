@@ -1,10 +1,13 @@
-.PHONY: dev build package package-linux release run web docker-up docker-build docker-down
+.PHONY: dev build license-check package package-linux release run web docker-up docker-build docker-down
 
 web:
 	cd web && npm install && npm run build
 
 build:
 	bash scripts/build.sh
+
+license-check:
+	bash scripts/license-check.sh
 
 package:
 	bash scripts/package.sh

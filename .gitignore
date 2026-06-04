@@ -10,3 +10,4 @@ dist/
 out/
 out.old/
 tmp/
+scancode-report.json
