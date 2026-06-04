@@ -76,6 +76,14 @@ make package-linux
 
 This produces package versions like `0.1.0`, which are easier to reason about than hash-derived snapshot versions.
 
+Or use the simple release wrapper:
+
+```bash
+VERSION=v0.1.0 make release
+```
+
+`make release` requires a clean working tree and the GitHub CLI (`gh`). It builds the tarball plus deb/rpm assets, creates and pushes the tag, then creates a GitHub release with the new assets.
+
 ## Verify a Package
 
 For Debian packages:
@@ -113,4 +121,3 @@ The package installs:
 - `/etc/uvoo-minicms/uvoo-minicms.env`
 - `/var/lib/uvoo-minicms`
 - `uvoo-minicms.service`
-

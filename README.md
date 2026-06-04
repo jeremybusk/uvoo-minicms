@@ -100,6 +100,12 @@ FORMATS=deb make package-linux
 FORMATS=rpm make package-linux
 ```
 
+To build release assets, create/push a tag, and publish a GitHub release with those assets:
+
+```bash
+VERSION=v0.1.0 make release
+```
+
 The packages install:
 
 - binary: `/usr/bin/uvoo-minicms`
@@ -126,6 +132,18 @@ On upgrade, the package preserves the existing config and restarts the service. 
 sudo editor /etc/uvoo-minicms/uvoo-minicms.env
 sudo systemctl restart uvoo-minicms
 ```
+
+## License
+
+Uvoo-MiniCMS is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
+
+Before publishing releases or adding new third-party code/assets, run:
+
+```bash
+make license-check
+```
+
+See [docs/LICENSE_AUDIT.md](docs/LICENSE_AUDIT.md) for scanner setup and the dependency license review process.
 
 ## Docker
 
