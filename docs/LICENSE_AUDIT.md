@@ -27,18 +27,15 @@ W3C-20150513.
 
 ## Current Findings
 
-The frontend dependency tree currently includes:
+The previous MDXEditor dependency path was removed:
 
 ```text
 @mdxeditor/editor -> @codesandbox/sandpack-react -> @codesandbox/sandpack-client -> @codesandbox/nodebox
 ```
 
-`@codesandbox/nodebox` uses the Sustainable Use License. That license restricts
-commercial and redistribution use and should be treated as incompatible with a
-general Apache-2.0 open source release unless legal counsel confirms otherwise.
-
-Before publishing a public release, remove or replace the dependency path, avoid
-shipping the affected package, or document a reviewed legal decision.
+The admin Markdown editor now uses CodeMirror 6 directly. `make license-check`
+should remain free of `@codesandbox/nodebox`, Sandpack, and other
+Sustainable Use License packages.
 
 Before adding copied third-party files, generated assets, examples, or templates,
 record their source and license. Do not add GPL, AGPL, LGPL, proprietary, or

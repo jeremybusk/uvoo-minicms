@@ -357,94 +357,44 @@ body,
   border-radius: var(--admin-control-radius);
 }
 
-.mdField .mdxeditor {
-  --basePageBg: var(--admin-surface);
-  --baseBase: var(--admin-surface-2);
-  --baseBg: var(--admin-surface-2);
-  --baseBgSubtle: var(--admin-bg-soft);
-  --baseBgActive: rgba(var(--admin-primary-rgb), .16);
-  --baseLine: var(--admin-border);
-  --baseBorder: var(--admin-border);
-  --baseBorderHover: var(--admin-secondary);
-  --baseSolid: var(--admin-primary);
-  --baseSolidHover: var(--admin-primary);
-  --baseText: var(--admin-muted);
-  --baseTextContrast: var(--admin-text);
-  --accentText: var(--admin-primary);
+.markdownEditor {
   min-height: 540px;
   color: var(--admin-text);
   background: var(--admin-surface);
   border: 1px solid var(--admin-border);
   border-radius: var(--admin-control-radius);
+  overflow: hidden;
 }
 
-.mdField .mdxeditor-toolbar {
+.markdownToolbar {
+  display: flex;
+  align-items: center;
+  padding: 8px;
   background: var(--admin-surface-2);
-  border-color: var(--admin-border);
-  border-radius: var(--admin-control-radius) var(--admin-control-radius) 0 0;
+  border-bottom: 1px solid var(--admin-border);
 }
 
-.mdField .mdxeditor-toolbar button,
-.mdField .mdxeditor-toolbar [role="button"],
-.mdField .mdxeditor-toolbar svg {
-  color: var(--admin-text);
-}
-
-.mdField .mdxeditor-toolbar button:hover,
-.mdField .mdxeditor-toolbar [role="button"]:hover {
-  background: rgba(var(--admin-primary-rgb), .12);
-}
-
-.mdField .mdxeditor-popup-container,
-.mdField [role="dialog"] {
-  color: var(--admin-text);
-  background: var(--admin-surface);
-  border-color: var(--admin-border);
-}
-
-.mdxeditor-root-contenteditable {
-  padding: 18px;
+.markdownToolbar .ant-btn,
+.markdownToolbar .ant-select-selector {
   color: var(--admin-text) !important;
-  background: var(--admin-surface);
-  font-size: 16px;
-  line-height: 1.65;
+  background: var(--admin-surface) !important;
+  border-color: var(--admin-border) !important;
 }
 
-.tinyMdx,
-.tinyMdx .mdxeditor-rich-text-editor,
-.tinyMdx .mdxeditor-root-contenteditable,
-.tinyMdx .tinyMdxContent,
-.tinyMdx .tinyMdxContent *,
-.tinyMdx [contenteditable="true"],
-.tinyMdx [contenteditable="true"] * {
-  color: var(--admin-text) !important;
+.markdownToolbar .ant-btn:hover,
+.markdownToolbar .ant-select-selector:hover {
+  color: var(--admin-primary) !important;
+  border-color: var(--admin-primary) !important;
 }
 
-.tinyMdx .mdxeditor-toolbar,
-.tinyMdx .mdxeditor-select-content,
-.tinyMdx .mdxeditor-popup-container {
-  color: var(--admin-text) !important;
-  background: var(--admin-surface-2) !important;
+.markdownAssetSelect {
+  width: min(280px, 70vw);
 }
 
-.tinyMdx button,
-.tinyMdx [role="button"],
-.tinyMdx [role="option"],
-.tinyMdx svg {
-  color: var(--admin-text) !important;
+.markdownCodeMirror {
+  background: var(--admin-surface-2);
 }
 
-.tinyMdx [data-disabled],
-.tinyMdx [aria-disabled="true"] {
-  color: var(--admin-muted) !important;
-}
-
-.mdxeditor-root-contenteditable img {
-  max-width: 100%;
-  height: auto;
-}
-
-.mdxeditor-root-contenteditable pre,
 .mdField .cm-editor,
 .mdField .cm-gutters {
   color: var(--admin-text) !important;
@@ -452,8 +402,8 @@ body,
 }
 
 .mdField .cm-editor {
-  border: 1px solid var(--admin-border);
-  border-radius: var(--admin-control-radius);
+  border: 0;
+  border-radius: 0;
   overflow: hidden;
 }
 
