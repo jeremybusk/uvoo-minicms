@@ -1,4 +1,4 @@
-.PHONY: dev build package package-linux run web docker-up docker-build docker-down
+.PHONY: dev build package package-linux release run web docker-up docker-build docker-down
 
 web:
 	cd web && npm install && npm run build
@@ -11,6 +11,9 @@ package:
 
 package-linux:
 	bash scripts/package-linux.sh
+
+release:
+	bash scripts/release.sh
 
 run: build
 	./bin/uvoo-minicms

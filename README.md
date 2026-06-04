@@ -100,6 +100,12 @@ FORMATS=deb make package-linux
 FORMATS=rpm make package-linux
 ```
 
+To build release assets, create/push a tag, and publish a GitHub release with those assets:
+
+```bash
+VERSION=v0.1.0 make release
+```
+
 The packages install:
 
 - binary: `/usr/bin/uvoo-minicms`
