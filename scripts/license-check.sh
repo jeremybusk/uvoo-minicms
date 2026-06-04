@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ALLOWED_GO="${ALLOWED_GO:-Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,ISC,BlueOak-1.0.0}"
 ALLOWED_NPM="${ALLOWED_NPM:-Apache-2.0;MIT;BSD-2-Clause;BSD-3-Clause;ISC;BlueOak-1.0.0;0BSD;Python-2.0;CC-BY-4.0;W3C-20150513}"
 ALLOWED_LOCK_PATTERN="${ALLOWED_LOCK_PATTERN:-^(Apache-2.0|MIT|BSD-2-Clause|BSD-3-Clause|ISC|BlueOak-1.0.0|0BSD|Python-2.0|CC-BY-4.0|W3C-20150513)$}"
+INCLUDE_DEV_LICENSES="${INCLUDE_DEV_LICENSES:-0}"
 status=0
 
 echo "checking Go module licenses"
@@ -22,6 +23,7 @@ if command -v jq >/dev/null 2>&1 && [ -f "$ROOT/web/package-lock.json" ]; then
     jq -r --arg pattern "$ALLOWED_LOCK_PATTERN" '
       .packages
       | to_entries[]
+      | select(env.INCLUDE_DEV_LICENSES == "1" or (.value.dev != true))
       | select(.value.license and (.value.license | test($pattern) | not))
       | "\(.key)\t\(.value.version // "")\t\(.value.license)"
     ' "$ROOT/web/package-lock.json"

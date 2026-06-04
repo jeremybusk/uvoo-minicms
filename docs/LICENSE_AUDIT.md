@@ -8,6 +8,13 @@ Run the local helper:
 make license-check
 ```
 
+By default this checks production/distribution dependencies. To include dev-only
+packages from `web/package-lock.json`, run:
+
+```bash
+INCLUDE_DEV_LICENSES=1 make license-check
+```
+
 The helper uses these scanners when installed:
 
 - Go modules: `go-licenses`
