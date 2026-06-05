@@ -48,7 +48,9 @@ export default function MdxBodyEditor({ adminDark, editorKey, imageSuggestions, 
       el: hostRef.current,
       initialValue: markdown,
       initialEditType: 'wysiwyg',
-      previewStyle: 'vertical',
+      // The vertical split preview can call posAtCoords during hidden/resizing
+      // states and crash in the bundled editor. WYSIWYG mode does not need it.
+      previewStyle: 'tab',
       minHeight: '540px',
       autofocus: false,
       usageStatistics: false,
