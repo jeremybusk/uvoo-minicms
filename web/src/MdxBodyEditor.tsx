@@ -1,11 +1,22 @@
-import { useEffect, useMemo, useRef } from 'react'
-import { Button, Select, Space } from 'antd'
-import { EditorState, Extension } from '@codemirror/state'
-import { EditorView, ViewUpdate, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view'
-import { defaultKeymap, history, historyKeymap, indentWithTab, redo, undo } from '@codemirror/commands'
-import { bracketMatching, defaultHighlightStyle, indentOnInput, syntaxHighlighting } from '@codemirror/language'
-import { markdown } from '@codemirror/lang-markdown'
-import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
+import { useEffect, useRef } from 'react'
+import { Select } from 'antd'
+import Editor from '@toast-ui/editor'
+import Prism from 'prismjs'
+import codeSyntaxHighlight from '@toast-ui/editor-plugin-code-syntax-highlight'
+import '@toast-ui/editor/dist/toastui-editor.css'
+import '@toast-ui/editor/dist/theme/toastui-editor-dark.css'
+import 'prismjs/themes/prism-tomorrow.css'
+import '@toast-ui/editor-plugin-code-syntax-highlight/dist/toastui-editor-plugin-code-syntax-highlight.css'
+import 'prismjs/components/prism-bash.js'
+import 'prismjs/components/prism-css.js'
+import 'prismjs/components/prism-go.js'
+import 'prismjs/components/prism-javascript.js'
+import 'prismjs/components/prism-json.js'
+import 'prismjs/components/prism-markdown.js'
+import 'prismjs/components/prism-python.js'
+import 'prismjs/components/prism-sql.js'
+import 'prismjs/components/prism-typescript.js'
+import 'prismjs/components/prism-yaml.js'
 
 type MdxBodyEditorProps = {
   adminDark: boolean
@@ -16,169 +27,80 @@ type MdxBodyEditorProps = {
   uploadImage: (file: File) => Promise<string>
 }
 
-export default function MdxBodyEditor({ adminDark, editorKey, imageSuggestions, markdown: markdownText, onChange, uploadImage }: MdxBodyEditorProps) {
+export default function MdxBodyEditor({ adminDark, editorKey, imageSuggestions, markdown, onChange, uploadImage }: MdxBodyEditorProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
-  const viewRef = useRef<EditorView | null>(null)
-  const fileRef = useRef<HTMLInputElement | null>(null)
+  const editorRef = useRef<Editor | null>(null)
   const onChangeRef = useRef(onChange)
+  const uploadImageRef = useRef(uploadImage)
 
   useEffect(() => {
     onChangeRef.current = onChange
   }, [onChange])
 
-  const extensions = useMemo<Extension[]>(() => [
-    lineNumbers(),
-    highlightActiveLineGutter(),
-    history(),
-    drawSelection(),
-    indentOnInput(),
-    bracketMatching(),
-    markdown(),
-    syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-    highlightSelectionMatches(),
-    keymap.of([
-      indentWithTab,
-      ...defaultKeymap,
-      ...historyKeymap,
-      ...searchKeymap
-    ]),
-    EditorView.lineWrapping,
-    EditorView.theme({
-      '&': {
-        minHeight: '540px'
-      },
-      '.cm-scroller': {
-        minHeight: '540px'
-      }
-    }, { dark: adminDark }),
-    EditorView.updateListener.of((update: ViewUpdate) => {
-      if (update.docChanged) {
-        onChangeRef.current(update.state.doc.toString())
-      }
-    })
-  ], [adminDark])
+  useEffect(() => {
+    uploadImageRef.current = uploadImage
+  }, [uploadImage])
 
   useEffect(() => {
     if (!hostRef.current) return
-    const state = EditorState.create({ doc: markdownText, extensions })
-    const view = new EditorView({ parent: hostRef.current, state })
-    viewRef.current = view
+
+    const editor = new Editor({
+      el: hostRef.current,
+      initialValue: markdown,
+      initialEditType: 'wysiwyg',
+      previewStyle: 'vertical',
+      minHeight: '540px',
+      autofocus: false,
+      usageStatistics: false,
+      theme: adminDark ? 'dark' : undefined,
+      plugins: [[codeSyntaxHighlight, { highlighter: Prism }]],
+      events: {
+        change: () => {
+          onChangeRef.current(editor.getMarkdown())
+        }
+      },
+      hooks: {
+        addImageBlobHook: (blob, callback) => {
+          uploadImageRef.current(blob as File)
+            .then(url => callback(url, blob instanceof File ? blob.name : 'image'))
+            .catch(() => undefined)
+        }
+      }
+    })
+
+    editorRef.current = editor
     return () => {
-      view.destroy()
-      viewRef.current = null
+      editor.destroy()
+      editorRef.current = null
     }
-  }, [editorKey, extensions])
+  }, [adminDark, editorKey])
 
   useEffect(() => {
-    const view = viewRef.current
-    if (!view) return
-    const current = view.state.doc.toString()
-    if (current !== markdownText) {
-      view.dispatch({
-        changes: { from: 0, to: current.length, insert: markdownText }
-      })
+    const editor = editorRef.current
+    if (!editor) return
+    if (editor.getMarkdown() !== markdown) {
+      editor.setMarkdown(markdown, false)
     }
-  }, [markdownText])
-
-  function focusEditor() {
-    viewRef.current?.focus()
-  }
-
-  function replaceSelection(before: string, after = before, fallback = 'text') {
-    const view = viewRef.current
-    if (!view) return
-    const selection = view.state.selection.main
-    const selected = view.state.sliceDoc(selection.from, selection.to) || fallback
-    const insert = `${before}${selected}${after}`
-    view.dispatch({
-      changes: { from: selection.from, to: selection.to, insert },
-      selection: { anchor: selection.from + before.length, head: selection.from + before.length + selected.length },
-      scrollIntoView: true
-    })
-    focusEditor()
-  }
-
-  function prefixLines(prefix: string) {
-    const view = viewRef.current
-    if (!view) return
-    const selection = view.state.selection.main
-    const fromLine = view.state.doc.lineAt(selection.from)
-    const toLine = view.state.doc.lineAt(selection.to)
-    const changes = []
-    for (let lineNo = fromLine.number; lineNo <= toLine.number; lineNo += 1) {
-      changes.push({ from: view.state.doc.line(lineNo).from, insert: prefix })
-    }
-    view.dispatch({ changes, scrollIntoView: true })
-    focusEditor()
-  }
-
-  function insertText(text: string, cursorOffset = text.length) {
-    const view = viewRef.current
-    if (!view) return
-    const selection = view.state.selection.main
-    view.dispatch({
-      changes: { from: selection.from, to: selection.to, insert: text },
-      selection: { anchor: selection.from + cursorOffset },
-      scrollIntoView: true
-    })
-    focusEditor()
-  }
-
-  function insertLink() {
-    const url = window.prompt('URL')
-    if (!url) return
-    const view = viewRef.current
-    const selection = view?.state.selection.main
-    const label = view && selection ? view.state.sliceDoc(selection.from, selection.to) || 'link' : 'link'
-    replaceSelection('[', `](${url})`, label)
-  }
+  }, [markdown])
 
   function insertImage(url: string) {
-    insertText(`![image](${url})`)
+    const editor = editorRef.current
+    if (!editor) return
+    editor.exec('addImage', { imageUrl: url, altText: 'image' })
+    editor.focus()
   }
 
-  async function uploadAndInsert(file: File) {
-    const url = await uploadImage(file)
-    insertImage(url)
-  }
-
-  return <div className={adminDark ? 'markdownEditor dark-theme' : 'markdownEditor'}>
-    <div className="markdownToolbar">
-      <Space wrap size={6}>
-        <Button size="small" onClick={() => viewRef.current && undo(viewRef.current)}>Undo</Button>
-        <Button size="small" onClick={() => viewRef.current && redo(viewRef.current)}>Redo</Button>
-        <Button size="small" onClick={() => replaceSelection('**', '**', 'bold')}>B</Button>
-        <Button size="small" onClick={() => replaceSelection('_', '_', 'italic')}>I</Button>
-        <Button size="small" onClick={() => replaceSelection('`', '`', 'code')}>Code</Button>
-        <Button size="small" onClick={() => prefixLines('# ')}>H1</Button>
-        <Button size="small" onClick={() => prefixLines('## ')}>H2</Button>
-        <Button size="small" onClick={() => prefixLines('- ')}>List</Button>
-        <Button size="small" onClick={() => prefixLines('> ')}>Quote</Button>
-        <Button size="small" onClick={insertLink}>Link</Button>
-        <Button size="small" onClick={() => fileRef.current?.click()}>Image</Button>
-        <Button size="small" onClick={() => insertText('\n| Column | Column |\n| --- | --- |\n| Value | Value |\n')}>Table</Button>
-        <Button size="small" onClick={() => insertText('\n```text\ncode\n```\n', 9)}>Block</Button>
-        {imageSuggestions.length > 0 && <Select
-          size="small"
-          className="markdownAssetSelect"
-          placeholder="Uploads"
-          value={undefined}
-          options={imageSuggestions.map(url => ({ label: url, value: url }))}
-          onChange={insertImage}
-        />}
-      </Space>
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={event => {
-          const file = event.target.files?.[0]
-          event.currentTarget.value = ''
-          if (file) uploadAndInsert(file).catch(() => undefined)
-        }}
+  return <div className={adminDark ? 'toastMarkdownEditor dark-theme' : 'toastMarkdownEditor'}>
+    {imageSuggestions.length > 0 && <div className="toastAssetBar">
+      <Select
+        size="small"
+        className="toastAssetSelect"
+        placeholder="Insert uploaded image"
+        value={undefined}
+        options={imageSuggestions.map(url => ({ label: url, value: url }))}
+        onChange={insertImage}
       />
-    </div>
-    <div ref={hostRef} className="markdownCodeMirror" />
+    </div>}
+    <div ref={hostRef} />
   </div>
 }

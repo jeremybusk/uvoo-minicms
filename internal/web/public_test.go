@@ -117,6 +117,59 @@ func TestRenderMenuMarksActivePage(t *testing.T) {
 	}
 }
 
+func TestPublicRenderInlineCode(t *testing.T) {
+	body, err := NewPublic(nil, "Demo").render("Use `CMS_ADDR` for the bind address.\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `<code>CMS_ADDR</code>`) {
+		t.Fatalf("expected inline code element, got %s", body)
+	}
+}
+
+func TestPublicRenderFencedCodeHighlightsSyntax(t *testing.T) {
+	body, err := NewPublic(nil, "Demo").render("```python\nclass Dog:\n    pass\n```\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(body)
+	if !strings.Contains(html, `<span`) || !strings.Contains(html, `color:`) {
+		t.Fatalf("expected syntax-highlighted spans, got %s", html)
+	}
+	if !strings.Contains(html, `Dog`) {
+		t.Fatalf("expected code content to be preserved, got %s", html)
+	}
+}
+
+func TestPublicRenderMermaidCodeKeepsLanguageClass(t *testing.T) {
+	body, err := NewPublic(nil, "Demo").render("```mermaid\ngraph TD\n  A-->B\n```\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `language-mermaid`) {
+		t.Fatalf("expected mermaid language class for client renderer hook, got %s", body)
+	}
+}
+
+func TestPublicTemplateStylesInlineCode(t *testing.T) {
+	var b bytes.Buffer
+	err := publicTpl.Execute(&b, map[string]any{
+		"SiteName": "Test",
+		"Title":    "Home",
+		"Body":     template.HTML(`<p>Use <code>CMS_ADDR</code>.</p>`),
+	})
+	if err != nil {
+		t.Fatalf("execute public template: %v", err)
+	}
+	html := b.String()
+	if !strings.Contains(html, `:not(pre)&gt;code`) && !strings.Contains(html, `:not(pre)>code`) {
+		t.Fatalf("expected inline code CSS in template, got %s", html)
+	}
+	if !strings.Contains(html, `pre code`) {
+		t.Fatalf("expected code block CSS reset in template, got %s", html)
+	}
+}
+
 func TestPublicTemplateSideNavDoesNotRenderHiddenTopMenu(t *testing.T) {
 	menu := renderMenu([]db.NavItem{
 		{ID: "services", Type: "section", Label: "Services", Enabled: true},
