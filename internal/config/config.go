@@ -17,6 +17,7 @@ type Config struct {
 	AdminUser         string
 	AdminPass         string
 	AdminRateLimit    int
+	CSPMode           string
 	SessionTTL        time.Duration
 	AllowedCIDRs      []string
 	DeniedCIDRs       []string
@@ -41,6 +42,7 @@ func Load() Config {
 		AdminUser:         env("CMS_ADMIN_USER", "admin"),
 		AdminPass:         env("CMS_ADMIN_PASS", "change-me"),
 		AdminRateLimit:    intEnv("CMS_ADMIN_RATE_LIMIT", 0),
+		CSPMode:           env("CMS_CSP_MODE", "enforce"),
 		SessionTTL:        dur("CMS_SESSION_TTL", 12*time.Hour),
 		AllowedCIDRs:      csv("CMS_ALLOW_CIDRS"),
 		DeniedCIDRs:       csv("CMS_DENY_CIDRS"),
@@ -64,6 +66,7 @@ func Load() Config {
 	flag.StringVar(&cfg.AdminUser, "admin-user", cfg.AdminUser, "admin username")
 	flag.StringVar(&cfg.AdminPass, "admin-pass", cfg.AdminPass, "admin password")
 	flag.IntVar(&cfg.AdminRateLimit, "admin-rate-limit", cfg.AdminRateLimit, "admin/API requests per minute per client IP; 0 disables")
+	flag.StringVar(&cfg.CSPMode, "csp-mode", cfg.CSPMode, "Content Security Policy mode: enforce, report-only, or off")
 	flag.StringVar(&allowCIDRs, "allow-cidrs", allowCIDRs, "comma-separated IPv4/IPv6 CIDR allow list")
 	flag.StringVar(&denyCIDRs, "deny-cidrs", denyCIDRs, "comma-separated IPv4/IPv6 CIDR deny list")
 	flag.StringVar(&cfg.MaxMindDBPath, "maxmind-db", cfg.MaxMindDBPath, "MaxMind GeoIP2 country database path")
@@ -80,6 +83,7 @@ func Load() Config {
 	if cfg.AdminRateLimit < 0 {
 		cfg.AdminRateLimit = 0
 	}
+	cfg.CSPMode = normalizeCSPMode(cfg.CSPMode)
 	return cfg
 }
 
@@ -135,6 +139,14 @@ func intEnv(k string, d int) int {
 		return d
 	}
 	return n
+}
+func normalizeCSPMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "off", "report-only":
+		return strings.ToLower(strings.TrimSpace(mode))
+	default:
+		return "enforce"
+	}
 }
 func dur(k string, d time.Duration) time.Duration {
 	v := strings.TrimSpace(os.Getenv(k))

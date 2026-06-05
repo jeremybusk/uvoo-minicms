@@ -57,6 +57,7 @@ random_password() {
 : "${CMS_DB:=$CMS_DATA_DIR/cms.db}"
 : "${CMS_UPLOAD_DIR:=$CMS_DATA_DIR/uploads}"
 : "${CMS_WEB_ROOT:=./web/dist}"
+: "${CMS_CSP_MODE:=enforce}"
 
 case "$CMS_ADMIN_PASS" in
   ""|change-me|change-me-now)
@@ -80,13 +81,14 @@ CMS_DATA_DIR=$CMS_DATA_DIR
 CMS_DB=$CMS_DB
 CMS_UPLOAD_DIR=$CMS_UPLOAD_DIR
 CMS_WEB_ROOT=$CMS_WEB_ROOT
+CMS_CSP_MODE=$CMS_CSP_MODE
 EOF
     fi
     printf 'Generated admin password in .env: %s\n' "$CMS_ADMIN_PASS" >&2
     ;;
 esac
 
-export CMS_ADDR CMS_SITE_NAME CMS_ADMIN_USER CMS_ADMIN_PASS CMS_ADMIN_RATE_LIMIT CMS_DATA_DIR CMS_DB CMS_UPLOAD_DIR CMS_WEB_ROOT
+export CMS_ADDR CMS_SITE_NAME CMS_ADMIN_USER CMS_ADMIN_PASS CMS_ADMIN_RATE_LIMIT CMS_DATA_DIR CMS_DB CMS_UPLOAD_DIR CMS_WEB_ROOT CMS_CSP_MODE
 mkdir -p "$CMS_UPLOAD_DIR"
 
 exec ./uvoo-minicms "$@"

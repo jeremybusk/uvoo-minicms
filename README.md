@@ -249,6 +249,7 @@ Icon names map to Font Awesome solid classes, so `{{icon:rocket}}` becomes `fa-s
 | `CMS_UPLOAD_DIR` | `./data/uploads` | Upload directory. |
 | `CMS_WEB_ROOT` | `web/dist` | Admin React build directory. Package installs normally use `/usr/share/uvoo-minicms/web/dist`. |
 | `CMS_MAX_UPLOAD_BYTES` | `26214400` | Max upload size. |
+| `CMS_CSP_MODE` | `enforce` | Content Security Policy mode: `enforce`, `report-only`, or `off`. |
 | `CMS_TLS_CERT` | empty | TLS certificate file. Requires `CMS_TLS_KEY`; enables HTTPS when both are set. |
 | `CMS_TLS_KEY` | empty | TLS private key file. Requires `CMS_TLS_CERT`. |
 | `CMS_ALLOW_CIDRS` | empty | Comma-separated CIDRs. Empty means allow all. |
@@ -290,6 +291,7 @@ The admin `Security` tab adds runtime rules without needing to restart:
 - Use TLS directly with `CMS_TLS_CERT`/`CMS_TLS_KEY`, or put it behind HTTPS. Basic Auth is only safe over HTTPS.
 - Set a strong `CMS_ADMIN_PASS`.
 - Set `CMS_ADMIN_RATE_LIMIT` to a reasonable per-minute value if the admin/API is internet-facing.
+- Use `CMS_CSP_MODE=report-only` while testing CSP compatibility on an existing site; use `off` only as a temporary workaround.
 - Keep `CMS_TRUST_PROXY_HEADERS=false` unless a trusted proxy strips and rewrites those headers.
 - Public uploads are limited to common image/text/document extensions.
 - Raw HTML in Markdown is escaped by default; use Markdown syntax for page content.

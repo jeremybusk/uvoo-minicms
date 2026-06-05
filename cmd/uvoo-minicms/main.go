@@ -55,7 +55,7 @@ func main() {
 	if (cfg.TLSCertFile == "") != (cfg.TLSKeyFile == "") {
 		log.Fatal("both TLS cert and key must be provided")
 	}
-	srv := &http.Server{Addr: cfg.Addr, Handler: secureHeaders(mux), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 4 * time.Minute, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 1 << 20}
+	srv := &http.Server{Addr: cfg.Addr, Handler: secureHeaders(mux, cfg.CSPMode), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 4 * time.Minute, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 1 << 20}
 	log.Printf("uvoo-minicms listening on %s db=%s uploads=%s web-root=%s tls=%t", cfg.Addr, cfg.DBPath, filepath.Clean(cfg.UploadDir), filepath.Clean(cfg.WebRoot), tlsEnabled)
 	if tlsEnabled {
 		log.Fatal(srv.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile))
@@ -71,14 +71,25 @@ func chain(h http.Handler, mws ...mw) http.Handler {
 	}
 	return h
 }
-func secureHeaders(next http.Handler) http.Handler {
+func secureHeaders(next http.Handler, cspMode string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "same-origin")
 		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Content-Security-Policy", contentSecurityPolicy())
+		setCSPHeader(w, cspMode)
 		next.ServeHTTP(w, r)
 	})
+}
+
+func setCSPHeader(w http.ResponseWriter, mode string) {
+	switch mode {
+	case "off":
+		return
+	case "report-only":
+		w.Header().Set("Content-Security-Policy-Report-Only", contentSecurityPolicy())
+	default:
+		w.Header().Set("Content-Security-Policy", contentSecurityPolicy())
+	}
 }
 
 func contentSecurityPolicy() string {

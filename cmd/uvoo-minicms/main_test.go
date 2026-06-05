@@ -97,7 +97,7 @@ func TestSameOriginMiddlewareRejectsUntrustedForwardedOrigin(t *testing.T) {
 func TestSecureHeadersAddsConservativeCSP(t *testing.T) {
 	handler := secureHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	}))
+	}), "enforce")
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -111,6 +111,31 @@ func TestSecureHeadersAddsConservativeCSP(t *testing.T) {
 	} {
 		if !strings.Contains(csp, want) {
 			t.Fatalf("expected CSP to contain %q, got %q", want, csp)
+		}
+	}
+}
+
+func TestSecureHeadersSupportsCSPReportOnlyAndOff(t *testing.T) {
+	for _, tc := range []struct {
+		mode       string
+		wantHeader string
+	}{
+		{mode: "report-only", wantHeader: "Content-Security-Policy-Report-Only"},
+		{mode: "off", wantHeader: ""},
+	} {
+		handler := secureHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}), tc.mode)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		if tc.wantHeader == "" {
+			if rec.Header().Get("Content-Security-Policy") != "" || rec.Header().Get("Content-Security-Policy-Report-Only") != "" {
+				t.Fatalf("mode %s: expected no CSP headers, got %#v", tc.mode, rec.Header())
+			}
+			continue
+		}
+		if rec.Header().Get(tc.wantHeader) == "" {
+			t.Fatalf("mode %s: expected %s header, got %#v", tc.mode, tc.wantHeader, rec.Header())
 		}
 	}
 }
