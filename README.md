@@ -250,11 +250,13 @@ Icon names map to Font Awesome solid classes, so `{{icon:rocket}}` becomes `fa-s
 | `CMS_WEB_ROOT` | `web/dist` | Admin React build directory. Package installs normally use `/usr/share/uvoo-minicms/web/dist`. |
 | `CMS_MAX_UPLOAD_BYTES` | `26214400` | Max upload size. |
 | `CMS_CSP_MODE` | `enforce` | Content Security Policy mode: `enforce`, `report-only`, or `off`. |
+| `CMS_HSTS_ENABLED` | `false` | Emits `Strict-Transport-Security` on HTTPS requests when enabled. |
+| `CMS_HSTS_MAX_AGE` | `15552000` | HSTS `max-age` in seconds. Ignored when HSTS is disabled. |
 | `CMS_TLS_CERT` | empty | TLS certificate file. Requires `CMS_TLS_KEY`; enables HTTPS when both are set. |
 | `CMS_TLS_KEY` | empty | TLS private key file. Requires `CMS_TLS_CERT`. |
 | `CMS_ALLOW_CIDRS` | empty | Comma-separated CIDRs. Empty means allow all. |
 | `CMS_DENY_CIDRS` | empty | Comma-separated denied CIDRs. |
-| `CMS_TRUST_PROXY_HEADERS` | `false` | Enables `CF-Connecting-IP`, `X-Real-IP`, and `X-Forwarded-For`. Only enable behind trusted reverse proxy. |
+| `CMS_TRUST_PROXY_HEADERS` | `false` | Enables trusted client IP, host, and proto headers from a reverse proxy. Only enable behind a proxy that strips and rewrites them. |
 | `CMS_MAXMIND_DB` | empty | Path to GeoLite2/GeoIP2 Country `.mmdb`. Empty disables geo filtering. |
 | `CMS_ALLOW_COUNTRIES` | empty | ISO country allow list, e.g. `US,CA`. Empty means allow all except denied. |
 | `CMS_DENY_COUNTRIES` | empty | ISO country deny list. |
@@ -293,6 +295,7 @@ The admin `Security` tab adds runtime rules without needing to restart:
 - Set `CMS_ADMIN_RATE_LIMIT` to a reasonable per-minute value if the admin/API is internet-facing.
 - Rate-limited admin/API responses include `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `Retry-After` on `429`.
 - Use `CMS_CSP_MODE=report-only` while testing CSP compatibility on an existing site; use `off` only as a temporary workaround.
+- Set `CMS_HSTS_ENABLED=true` after confirming the site is consistently served over HTTPS. Behind a reverse proxy, also set `CMS_TRUST_PROXY_HEADERS=true` only when the proxy strips and rewrites forwarded headers.
 - Keep `CMS_TRUST_PROXY_HEADERS=false` unless a trusted proxy strips and rewrites those headers.
 - Public uploads are limited to common image/text/document extensions.
 - Raw HTML in Markdown is escaped by default; use Markdown syntax for page content.

@@ -160,7 +160,7 @@ func TestNoStoreSetsAdminCacheHeader(t *testing.T) {
 func TestSecureHeadersAddsConservativeCSP(t *testing.T) {
 	handler := secureHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	}), "enforce")
+	}), "enforce", false, 0, false)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -188,7 +188,7 @@ func TestSecureHeadersSupportsCSPReportOnlyAndOff(t *testing.T) {
 	} {
 		handler := secureHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNoContent)
-		}), tc.mode)
+		}), tc.mode, false, 0, false)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 		if tc.wantHeader == "" {
@@ -200,5 +200,53 @@ func TestSecureHeadersSupportsCSPReportOnlyAndOff(t *testing.T) {
 		if rec.Header().Get(tc.wantHeader) == "" {
 			t.Fatalf("mode %s: expected %s header, got %#v", tc.mode, tc.wantHeader, rec.Header())
 		}
+	}
+}
+
+func TestSecureHeadersDoesNotAddHSTSByDefault(t *testing.T) {
+	handler := secureHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), "enforce", false, 15552000, false)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "https://cms.example/", nil))
+	if rec.Header().Get("Strict-Transport-Security") != "" {
+		t.Fatalf("expected no HSTS header by default, got %#v", rec.Header())
+	}
+}
+
+func TestSecureHeadersAddsHSTSOnHTTPSWhenEnabled(t *testing.T) {
+	handler := secureHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), "enforce", true, 31536000, false)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "https://cms.example/", nil))
+	if got := rec.Header().Get("Strict-Transport-Security"); got != "max-age=31536000" {
+		t.Fatalf("expected HSTS header, got %q", got)
+	}
+}
+
+func TestSecureHeadersUsesTrustedForwardedProtoForHSTS(t *testing.T) {
+	handler := secureHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), "enforce", true, 15552000, true)
+	req := httptest.NewRequest(http.MethodGet, "http://backend/", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if got := rec.Header().Get("Strict-Transport-Security"); got != "max-age=15552000" {
+		t.Fatalf("expected HSTS header behind trusted HTTPS proxy, got %q", got)
+	}
+}
+
+func TestSecureHeadersIgnoresUntrustedForwardedProtoForHSTS(t *testing.T) {
+	handler := secureHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), "enforce", true, 15552000, false)
+	req := httptest.NewRequest(http.MethodGet, "http://backend/", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Header().Get("Strict-Transport-Security") != "" {
+		t.Fatalf("expected no HSTS header for untrusted forwarded HTTPS, got %#v", rec.Header())
 	}
 }

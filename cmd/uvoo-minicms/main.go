@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -55,7 +56,7 @@ func main() {
 	if (cfg.TLSCertFile == "") != (cfg.TLSKeyFile == "") {
 		log.Fatal("both TLS cert and key must be provided")
 	}
-	srv := &http.Server{Addr: cfg.Addr, Handler: secureHeaders(mux, cfg.CSPMode), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 4 * time.Minute, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 1 << 20}
+	srv := &http.Server{Addr: cfg.Addr, Handler: secureHeaders(mux, cfg.CSPMode, cfg.HSTSEnabled, cfg.HSTSMaxAge, cfg.TrustProxyHeaders), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 4 * time.Minute, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 1 << 20}
 	log.Printf("uvoo-minicms listening on %s db=%s uploads=%s web-root=%s tls=%t", cfg.Addr, cfg.DBPath, filepath.Clean(cfg.UploadDir), filepath.Clean(cfg.WebRoot), tlsEnabled)
 	if tlsEnabled {
 		log.Fatal(srv.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile))
@@ -71,12 +72,13 @@ func chain(h http.Handler, mws ...mw) http.Handler {
 	}
 	return h
 }
-func secureHeaders(next http.Handler, cspMode string) http.Handler {
+func secureHeaders(next http.Handler, cspMode string, hstsEnabled bool, hstsMaxAge int, trustProxy bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "same-origin")
 		w.Header().Set("X-Frame-Options", "DENY")
 		setCSPHeader(w, cspMode)
+		setHSTSHeader(w, r, hstsEnabled, hstsMaxAge, trustProxy)
 		next.ServeHTTP(w, r)
 	})
 }
@@ -107,6 +109,23 @@ func contentSecurityPolicy() string {
 		"script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
 		"frame-src https://www.youtube-nocookie.com https://player.vimeo.com",
 	}, "; ")
+}
+
+func setHSTSHeader(w http.ResponseWriter, r *http.Request, enabled bool, maxAge int, trustProxy bool) {
+	if !enabled || maxAge <= 0 || !requestIsHTTPS(r, trustProxy) {
+		return
+	}
+	w.Header().Set("Strict-Transport-Security", "max-age="+strconv.Itoa(maxAge))
+}
+
+func requestIsHTTPS(r *http.Request, trustProxy bool) bool {
+	if r.TLS != nil {
+		return true
+	}
+	if !trustProxy {
+		return false
+	}
+	return strings.EqualFold(firstHeaderValue(r.Header.Get("X-Forwarded-Proto")), "https")
 }
 
 func cacheUploads(next http.Handler) http.Handler {

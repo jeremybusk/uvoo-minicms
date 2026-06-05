@@ -18,6 +18,8 @@ type Config struct {
 	AdminPass         string
 	AdminRateLimit    int
 	CSPMode           string
+	HSTSEnabled       bool
+	HSTSMaxAge        int
 	SessionTTL        time.Duration
 	AllowedCIDRs      []string
 	DeniedCIDRs       []string
@@ -43,6 +45,8 @@ func Load() Config {
 		AdminPass:         env("CMS_ADMIN_PASS", "change-me"),
 		AdminRateLimit:    intEnv("CMS_ADMIN_RATE_LIMIT", 0),
 		CSPMode:           env("CMS_CSP_MODE", "enforce"),
+		HSTSEnabled:       boolEnv("CMS_HSTS_ENABLED", false),
+		HSTSMaxAge:        intEnv("CMS_HSTS_MAX_AGE", 15552000),
 		SessionTTL:        dur("CMS_SESSION_TTL", 12*time.Hour),
 		AllowedCIDRs:      csv("CMS_ALLOW_CIDRS"),
 		DeniedCIDRs:       csv("CMS_DENY_CIDRS"),
@@ -67,6 +71,8 @@ func Load() Config {
 	flag.StringVar(&cfg.AdminPass, "admin-pass", cfg.AdminPass, "admin password")
 	flag.IntVar(&cfg.AdminRateLimit, "admin-rate-limit", cfg.AdminRateLimit, "admin/API requests per minute per client IP; 0 disables")
 	flag.StringVar(&cfg.CSPMode, "csp-mode", cfg.CSPMode, "Content Security Policy mode: enforce, report-only, or off")
+	flag.BoolVar(&cfg.HSTSEnabled, "hsts-enabled", cfg.HSTSEnabled, "emit Strict-Transport-Security on HTTPS requests")
+	flag.IntVar(&cfg.HSTSMaxAge, "hsts-max-age", cfg.HSTSMaxAge, "Strict-Transport-Security max-age in seconds")
 	flag.StringVar(&allowCIDRs, "allow-cidrs", allowCIDRs, "comma-separated IPv4/IPv6 CIDR allow list")
 	flag.StringVar(&denyCIDRs, "deny-cidrs", denyCIDRs, "comma-separated IPv4/IPv6 CIDR deny list")
 	flag.StringVar(&cfg.MaxMindDBPath, "maxmind-db", cfg.MaxMindDBPath, "MaxMind GeoIP2 country database path")
@@ -82,6 +88,9 @@ func Load() Config {
 	cfg.DeniedCountries = split(denyCountries, true)
 	if cfg.AdminRateLimit < 0 {
 		cfg.AdminRateLimit = 0
+	}
+	if cfg.HSTSMaxAge < 0 {
+		cfg.HSTSMaxAge = 0
 	}
 	cfg.CSPMode = normalizeCSPMode(cfg.CSPMode)
 	return cfg

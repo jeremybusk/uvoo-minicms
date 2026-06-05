@@ -57,6 +57,36 @@ func TestLoadReadsCSPModeFlag(t *testing.T) {
 	}
 }
 
+func TestLoadReadsHSTSConfigFromEnv(t *testing.T) {
+	t.Setenv("CMS_HSTS_ENABLED", "true")
+	t.Setenv("CMS_HSTS_MAX_AGE", "31536000")
+	cfg := loadForTest(t)
+	if !cfg.HSTSEnabled {
+		t.Fatal("expected HSTS to be enabled")
+	}
+	if cfg.HSTSMaxAge != 31536000 {
+		t.Fatalf("expected HSTS max age 31536000, got %d", cfg.HSTSMaxAge)
+	}
+}
+
+func TestLoadNormalizesNegativeHSTSMaxAge(t *testing.T) {
+	t.Setenv("CMS_HSTS_MAX_AGE", "-1")
+	cfg := loadForTest(t)
+	if cfg.HSTSMaxAge != 0 {
+		t.Fatalf("expected negative HSTS max age to become 0, got %d", cfg.HSTSMaxAge)
+	}
+}
+
+func TestLoadReadsHSTSFlags(t *testing.T) {
+	cfg := loadForTest(t, "-hsts-enabled", "-hsts-max-age", "86400")
+	if !cfg.HSTSEnabled {
+		t.Fatal("expected HSTS flag to enable HSTS")
+	}
+	if cfg.HSTSMaxAge != 86400 {
+		t.Fatalf("expected HSTS max age 86400, got %d", cfg.HSTSMaxAge)
+	}
+}
+
 func loadForTest(t *testing.T, args ...string) Config {
 	t.Helper()
 	oldCommandLine := flag.CommandLine
