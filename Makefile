@@ -1,7 +1,10 @@
-.PHONY: dev build license-check package package-linux release run web docker-up docker-build docker-down
+.PHONY: dev build license-check package package-linux release run web web-install docker-up docker-build docker-down
 
 web:
 	cd web && npm ci && npm run build
+
+web-install:
+	cd web && npm ci
 
 build:
 	bash scripts/build.sh
@@ -23,7 +26,8 @@ run: build
 
 dev:
 	mkdir -p data/uploads
-	( cd web && npm install && npm run dev ) & go run ./cmd/uvoo-minicms
+	test -d web/node_modules || $(MAKE) web-install
+	( cd web && npm run dev ) & go run ./cmd/uvoo-minicms
 
 docker-build:
 	docker compose build uvoo-minicms

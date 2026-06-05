@@ -41,8 +41,15 @@ web/                   React + Ant Design admin
 
 ```bash
 cp .env.example .env
-# edit CMS_ADMIN_PASS before exposing the service
+# edit CMS_ADMIN_PASS before starting; required when CMS_ADDR is :8080
 make run
+```
+
+For the two-process development setup, run:
+
+```bash
+make web-install
+make dev
 ```
 
 Open:
@@ -50,7 +57,7 @@ Open:
 - Public site: `http://localhost:8080/`
 - Admin: `http://localhost:8080/admin/`
 
-Default login is `admin` / `change-me` unless changed in `.env`. The server refuses to start with the default password on non-loopback bind addresses, so set `CMS_ADMIN_PASS` before running Docker or exposing the service.
+Default login is `admin` / `change-me` unless changed in `.env`. The bare binary defaults to loopback, and the server refuses to start with a default/empty password on non-loopback bind addresses such as `:8080`. Set `CMS_ADMIN_PASS` before running Docker or exposing the service.
 
 ## Non-Docker Linux Build
 
@@ -74,9 +81,10 @@ A user can run the archive like this:
 tar -xzf uvoo-minicms-*.tar.gz
 cd uvoo-minicms-*
 cp .env.example .env
-# edit CMS_ADMIN_PASS
 ./run.sh
 ```
+
+If `.env` still has a placeholder password, `run.sh` generates a strong `CMS_ADMIN_PASS`, writes it back to `.env`, and prints it once.
 
 The binary must be built for the same Linux libc family it will run on. Copying `/app/uvoo-minicms` out of the Alpine Docker image can fail on Ubuntu/Debian with `cannot execute: required file not found` because that container binary expects Alpine musl libraries. Use `scripts/package.sh` on the target distro, or publish separate distro-compatible tarballs.
 
@@ -149,7 +157,7 @@ See [docs/LICENSE_AUDIT.md](docs/LICENSE_AUDIT.md) for scanner setup and the dep
 
 ```bash
 cp .env.example .env
-# edit CMS_ADMIN_PASS
+# edit CMS_ADMIN_PASS before starting
 docker compose up --build
 ```
 
@@ -231,7 +239,7 @@ Icon names map to Font Awesome solid classes, so `{{icon:rocket}}` becomes `fa-s
 
 | Variable | Default | Notes |
 |---|---:|---|
-| `CMS_ADDR` | `:8080` | Listen address. |
+| `CMS_ADDR` | `127.0.0.1:8080` | Listen address. Docker/package examples set `:8080` and require a non-default admin password. |
 | `CMS_SITE_NAME` | `Uvoo-MiniCMS` | Public site name. |
 | `CMS_ADMIN_USER` | `admin` | Basic Auth username. |
 | `CMS_ADMIN_PASS` | `change-me` | Basic Auth password. Change this; default/empty passwords are refused on non-loopback bind addresses. |
@@ -254,7 +262,7 @@ Common CLI flags mirror the most useful env vars:
 ```bash
 uvoo-minicms -addr :8443 -db ./data/cms.db -uploads ./data/uploads \
   -web-root /usr/share/uvoo-minicms/web/dist \
-  -admin-user admin -admin-pass 'change-me' \
+  -admin-user admin -admin-pass 'use-a-long-random-password' \
   -allow-cidrs '203.0.113.10/32,2001:db8::/32' \
   -maxmind-db ./GeoLite2-Country.mmdb -allow-countries US,CA \
   -tls-cert ./certs/site.crt -tls-key ./certs/site.key
@@ -263,8 +271,8 @@ uvoo-minicms -addr :8443 -db ./data/cms.db -uploads ./data/uploads \
 Multiple instances can share the same packaged admin React build by pointing each process at the package web root while keeping instance state separate:
 
 ```bash
-uvoo-minicms -addr :8082 -db /var/lib/uvoo-minicms/site-a/cms.db -uploads /var/lib/uvoo-minicms/site-a/uploads -web-root /usr/share/uvoo-minicms/web/dist
-uvoo-minicms -addr :8083 -db /var/lib/uvoo-minicms/site-b/cms.db -uploads /var/lib/uvoo-minicms/site-b/uploads -web-root /usr/share/uvoo-minicms/web/dist
+uvoo-minicms -addr 127.0.0.1:8082 -db /var/lib/uvoo-minicms/site-a/cms.db -uploads /var/lib/uvoo-minicms/site-a/uploads -web-root /usr/share/uvoo-minicms/web/dist
+uvoo-minicms -addr 127.0.0.1:8083 -db /var/lib/uvoo-minicms/site-b/cms.db -uploads /var/lib/uvoo-minicms/site-b/uploads -web-root /usr/share/uvoo-minicms/web/dist
 ```
 
 ## Security ACLs
@@ -291,7 +299,7 @@ This project uses Connect RPC endpoints but keeps the code minimal by using `goo
 Example:
 
 ```bash
-curl -u admin:change-me \
+curl -u admin:use-a-long-random-password \
   -H 'Content-Type: application/json' \
   -d '{"slug":"home"}' \
   http://localhost:8080/cms.v1.CMSService/GetPage

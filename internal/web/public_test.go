@@ -117,6 +117,25 @@ func TestRenderMenuMarksActivePage(t *testing.T) {
 	}
 }
 
+func TestRenderMenuCacheKeysByItemsAndCurrentPath(t *testing.T) {
+	pub := NewPublic(nil, "Demo")
+	first := string(pub.renderMenuCached([]db.NavItem{
+		{ID: "home", Type: "link", Label: "Home", URL: "/", Enabled: true},
+		{ID: "support", Type: "link", Label: "Support", URL: "/support", Enabled: true},
+	}, "/support"))
+	if !strings.Contains(first, `href="/support" aria-current="page">Support</a>`) {
+		t.Fatalf("expected active support item, got %s", first)
+	}
+
+	second := string(pub.renderMenuCached([]db.NavItem{
+		{ID: "home", Type: "link", Label: "Start", URL: "/", Enabled: true},
+		{ID: "support", Type: "link", Label: "Support", URL: "/support", Enabled: true},
+	}, "/"))
+	if !strings.Contains(second, `href="/" aria-current="page">Start</a>`) {
+		t.Fatalf("expected cache to reflect changed menu/current path, got %s", second)
+	}
+}
+
 func TestPublicRenderInlineCode(t *testing.T) {
 	body, err := NewPublic(nil, "Demo").render("Use `CMS_ADDR` for the bind address.\n")
 	if err != nil {

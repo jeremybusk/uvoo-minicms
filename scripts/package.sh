@@ -35,6 +35,19 @@ if [ -f .env ]; then
   set +a
 fi
 
+random_password() {
+  if [ -r /dev/urandom ] && command -v od >/dev/null 2>&1; then
+    od -An -N 32 -tx1 /dev/urandom | tr -d ' \n'
+    return
+  fi
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+    return
+  fi
+  echo 'cannot generate a secure random CMS_ADMIN_PASS: install coreutils or openssl' >&2
+  exit 1
+}
+
 : "${CMS_ADDR:=:8080}"
 : "${CMS_SITE_NAME:=Uvoo-MiniCMS}"
 : "${CMS_ADMIN_USER:=admin}"
@@ -43,6 +56,33 @@ fi
 : "${CMS_DB:=$CMS_DATA_DIR/cms.db}"
 : "${CMS_UPLOAD_DIR:=$CMS_DATA_DIR/uploads}"
 : "${CMS_WEB_ROOT:=./web/dist}"
+
+case "$CMS_ADMIN_PASS" in
+  ""|change-me|change-me-now)
+    CMS_ADMIN_PASS="$(random_password)"
+    if [ -f .env ]; then
+      if grep -Eq '^CMS_ADMIN_PASS=' .env; then
+        tmp=".env.tmp.$$"
+        sed "s/^CMS_ADMIN_PASS=.*/CMS_ADMIN_PASS=$CMS_ADMIN_PASS/" .env > "$tmp"
+        mv "$tmp" .env
+      else
+        printf '\nCMS_ADMIN_PASS=%s\n' "$CMS_ADMIN_PASS" >> .env
+      fi
+    else
+      cat > .env <<EOF
+CMS_ADDR=$CMS_ADDR
+CMS_SITE_NAME=$CMS_SITE_NAME
+CMS_ADMIN_USER=$CMS_ADMIN_USER
+CMS_ADMIN_PASS=$CMS_ADMIN_PASS
+CMS_DATA_DIR=$CMS_DATA_DIR
+CMS_DB=$CMS_DB
+CMS_UPLOAD_DIR=$CMS_UPLOAD_DIR
+CMS_WEB_ROOT=$CMS_WEB_ROOT
+EOF
+    fi
+    printf 'Generated admin password in .env: %s\n' "$CMS_ADMIN_PASS" >&2
+    ;;
+esac
 
 export CMS_ADDR CMS_SITE_NAME CMS_ADMIN_USER CMS_ADMIN_PASS CMS_DATA_DIR CMS_DB CMS_UPLOAD_DIR CMS_WEB_ROOT
 mkdir -p "$CMS_UPLOAD_DIR"

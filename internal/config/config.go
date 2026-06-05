@@ -32,7 +32,7 @@ type Config struct {
 func Load() Config {
 	data := env("CMS_DATA_DIR", "./data")
 	cfg := Config{
-		Addr:              env("CMS_ADDR", ":8080"),
+		Addr:              env("CMS_ADDR", "127.0.0.1:8080"),
 		DataDir:           data,
 		DBPath:            env("CMS_DB", data+"/cms.db"),
 		UploadDir:         env("CMS_UPLOAD_DIR", data+"/uploads"),

@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"crypto/sha1"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"html/template"
@@ -86,7 +87,7 @@ func (p *Public) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"MetaDescription":      "",
 			"Body":                 renderBlogIndex(settings, posts),
 			"Footer":               footer,
-			"MenuHTML":             renderMenu(menu, routePath),
+			"MenuHTML":             p.renderMenuCached(menu, routePath),
 			"NavMenuStyle":         template.HTML(navMenuStyle()),
 			"SearchHTML":           "",
 			"LogoURL":              settings.LogoURL,
@@ -136,7 +137,7 @@ func (p *Public) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"MetaDescription":      page.MetaDescription,
 		"Body":                 body,
 		"Footer":               footer,
-		"MenuHTML":             renderMenu(menu, routePath),
+		"MenuHTML":             p.renderMenuCached(menu, routePath),
 		"NavMenuStyle":         template.HTML(navMenuStyle()),
 		"SearchHTML":           "",
 		"LogoURL":              settings.LogoURL,
@@ -186,7 +187,7 @@ func (p *Public) serveSearch(w http.ResponseWriter, r *http.Request, settings db
 		"Title":                "Search",
 		"Body":                 template.HTML(b.String()),
 		"Footer":               template.HTML(""),
-		"MenuHTML":             renderMenu(menuWithBlog(settings), "/search"),
+		"MenuHTML":             p.renderMenuCached(menuWithBlog(settings), "/search"),
 		"NavMenuStyle":         template.HTML(navMenuStyle()),
 		"LogoURL":              settings.LogoURL,
 		"FaviconURL":           settings.FaviconURL,
@@ -394,6 +395,19 @@ func (p *Public) render(markdown string) (template.HTML, error) {
 }
 
 func (p *Public) renderCached(key, markdown string) (template.HTML, error) {
+	return p.cachedHTML(key, func() (template.HTML, error) {
+		return p.render(markdown)
+	})
+}
+
+func (p *Public) renderMenuCached(items []db.NavItem, currentPath string) template.HTML {
+	html, _ := p.cachedHTML(menuCacheKey(items, currentPath), func() (template.HTML, error) {
+		return renderMenu(items, currentPath), nil
+	})
+	return html
+}
+
+func (p *Public) cachedHTML(key string, render func() (template.HTML, error)) (template.HTML, error) {
 	p.renderMu.RLock()
 	if p.renderCache != nil {
 		if html, ok := p.renderCache[key]; ok {
@@ -403,7 +417,7 @@ func (p *Public) renderCached(key, markdown string) (template.HTML, error) {
 	}
 	p.renderMu.RUnlock()
 
-	html, err := p.render(markdown)
+	html, err := render()
 	if err != nil {
 		return "", err
 	}
@@ -419,6 +433,18 @@ func (p *Public) renderCached(key, markdown string) (template.HTML, error) {
 func renderCacheKey(scope, version, markdown string) string {
 	sum := sha1.Sum([]byte(markdown))
 	return fmt.Sprintf("%s:%s:%x", scope, version, sum)
+}
+
+func menuCacheKey(items []db.NavItem, currentPath string) string {
+	raw, err := json.Marshal(struct {
+		Items       []db.NavItem `json:"items"`
+		CurrentPath string       `json:"current_path"`
+	}{Items: items, CurrentPath: cleanNavPath(currentPath)})
+	if err != nil {
+		raw = []byte(currentPath)
+	}
+	sum := sha1.Sum(raw)
+	return fmt.Sprintf("menu:%x", sum)
 }
 
 func (p *Public) expandRichMarkdown(markdown string) (string, map[string]string) {
