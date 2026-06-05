@@ -46,9 +46,9 @@ func main() {
 	adminRateLimit := auth.NewRateLimiter(cfg.AdminRateLimit, time.Minute, cfg.TrustProxyHeaders)
 
 	mux := http.NewServeMux()
-	mux.Handle("/cms.v1.CMSService/", chain(api, ipf.Middleware, adminACL.Middleware, adminGeo.Middleware, sameOrigin(cfg.TrustProxyHeaders), adminRateLimit.Middleware, auth.Basic{User: cfg.AdminUser, Pass: cfg.AdminPass}.Middleware))
+	mux.Handle("/cms.v1.CMSService/", chain(api, noStore, ipf.Middleware, adminACL.Middleware, adminGeo.Middleware, sameOrigin(cfg.TrustProxyHeaders), adminRateLimit.Middleware, auth.Basic{User: cfg.AdminUser, Pass: cfg.AdminPass}.Middleware))
 	mux.Handle("/uploads/", chain(uploads, ipf.Middleware, publicACL.Middleware, publicGeo.Middleware, cacheUploads))
-	mux.Handle("/admin/", chain(http.StripPrefix("/admin/", admin), ipf.Middleware, adminACL.Middleware, adminGeo.Middleware, adminRateLimit.Middleware, auth.Basic{User: cfg.AdminUser, Pass: cfg.AdminPass}.Middleware))
+	mux.Handle("/admin/", chain(http.StripPrefix("/admin/", admin), noStore, ipf.Middleware, adminACL.Middleware, adminGeo.Middleware, adminRateLimit.Middleware, auth.Basic{User: cfg.AdminUser, Pass: cfg.AdminPass}.Middleware))
 	mux.Handle("/", chain(pub, ipf.Middleware, publicACL.Middleware, publicGeo.Middleware))
 
 	tlsEnabled := cfg.TLSCertFile != "" && cfg.TLSKeyFile != ""
@@ -112,6 +112,13 @@ func contentSecurityPolicy() string {
 func cacheUploads(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		next.ServeHTTP(w, r)
+	})
+}
+
+func noStore(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
 		next.ServeHTTP(w, r)
 	})
 }

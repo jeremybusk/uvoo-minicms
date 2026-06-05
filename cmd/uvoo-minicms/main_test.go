@@ -146,6 +146,17 @@ func TestAdminAPIMiddlewareRejectsCrossOriginBeforeRateLimit(t *testing.T) {
 	}
 }
 
+func TestNoStoreSetsAdminCacheHeader(t *testing.T) {
+	handler := noStore(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/", nil))
+	if rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("expected no-store cache header, got %#v", rec.Header())
+	}
+}
+
 func TestSecureHeadersAddsConservativeCSP(t *testing.T) {
 	handler := secureHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
