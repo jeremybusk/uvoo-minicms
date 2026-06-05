@@ -470,7 +470,7 @@ body,
   background: var(--admin-surface-2);
   border: 1px solid var(--admin-border);
   border-radius: var(--admin-control-radius);
-  caret-color: var(--admin-primary);
+  caret-color: var(--admin-text);
 }
 
 .milkdownMarkdownEditor .milkdown pre code {
@@ -478,7 +478,7 @@ body,
   background: transparent;
   border: 0;
   padding: 0;
-  caret-color: var(--admin-primary);
+  caret-color: var(--admin-text);
 }
 
 .milkdownMarkdownEditor .milkdown .milkdown-code-block,
@@ -487,7 +487,7 @@ body,
 .milkdownMarkdownEditor .milkdown .milkdown-code-block .milkdown-code-block-placeholder {
   color: var(--admin-text);
   background: var(--admin-surface-2);
-  caret-color: var(--admin-primary);
+  caret-color: var(--admin-text);
 }
 
 .milkdownMarkdownEditor .milkdown .milkdown-code-block .cm-content,
@@ -496,17 +496,48 @@ body,
 .milkdownMarkdownEditor .milkdown .milkdown-code-block .cm-activeLineGutter {
   color: var(--admin-text);
   background: transparent;
-  caret-color: var(--admin-primary);
+  caret-color: var(--admin-text);
 }
 
 .milkdownMarkdownEditor .milkdown .milkdown-code-block .cm-cursor,
 .milkdownMarkdownEditor .milkdown .milkdown-code-block .cm-dropCursor {
-  border-left-color: var(--admin-primary) !important;
+  border-left-color: var(--admin-text) !important;
 }
 
 .milkdownMarkdownEditor .milkdown .milkdown-code-block .cm-selectionBackground,
-.milkdownMarkdownEditor .milkdown .milkdown-code-block.cm-focused .cm-selectionBackground {
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .cm-editor.cm-focused .cm-selectionBackground {
   background: rgba(var(--admin-primary-rgb), .28) !important;
+}
+
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .tools .language-button,
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .tools .tools-button-group button,
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .list-wrapper,
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .cm-panel {
+  color: var(--admin-text);
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .tools .language-button {
+  opacity: 1;
+}
+
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .tools .language-button:hover,
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .tools .tools-button-group button:hover,
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .language-list-item:hover,
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .language-list-item:focus-visible {
+  background: rgba(var(--admin-primary-rgb), .10);
+}
+
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .search-box {
+  color: var(--admin-text);
+  outline-color: var(--admin-primary);
+}
+
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .search-box .search-input {
+  color: var(--admin-text);
+  background: transparent;
+  caret-color: var(--admin-text);
 }
 
 .milkdownMarkdownEditor .milkdown .milkdown-toolbar,
