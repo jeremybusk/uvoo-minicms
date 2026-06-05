@@ -206,6 +206,33 @@ func TestDeleteAssetRemovesFileAndClearsIdentitySetting(t *testing.T) {
 	}
 }
 
+func TestUploadFileRejectsContentThatDoesNotMatchExtension(t *testing.T) {
+	store, err := db.Open(t.TempDir() + "/cms.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.DB.Close()
+	svc := &Service{Store: store, UploadDir: t.TempDir(), MaxUploadBytes: 2 << 20, SiteName: "Demo"}
+
+	err = callUploadFileError(svc, "not-a-real-image.png", "data:image/png;base64,"+base64.StdEncoding.EncodeToString([]byte("<script>alert(1)</script>")))
+	if err == nil || !strings.Contains(err.Error(), "content does not match") {
+		t.Fatalf("expected mismatched upload to be rejected, got %v", err)
+	}
+}
+
+func TestUploadFileAcceptsUTF8Text(t *testing.T) {
+	store, err := db.Open(t.TempDir() + "/cms.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.DB.Close()
+	svc := &Service{Store: store, UploadDir: t.TempDir(), MaxUploadBytes: 2 << 20, SiteName: "Demo"}
+
+	if err := callUploadFileError(svc, "notes.txt", "data:text/plain;base64,"+base64.StdEncoding.EncodeToString([]byte("hello\n"))); err != nil {
+		t.Fatalf("expected UTF-8 text upload to be accepted: %v", err)
+	}
+}
+
 func callSetSiteImage(t *testing.T, svc *Service, kind, name, data string) {
 	t.Helper()
 	msg, err := structpb.NewStruct(map[string]any{
@@ -230,6 +257,18 @@ func callDeleteAsset(t *testing.T, svc *Service, id int64) {
 	if _, err := svc.DeleteAsset(context.Background(), connect.NewRequest(msg)); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func callUploadFileError(svc *Service, name, data string) error {
+	msg, err := structpb.NewStruct(map[string]any{
+		"name": name,
+		"data": data,
+	})
+	if err != nil {
+		return err
+	}
+	_, err = svc.UploadFile(context.Background(), connect.NewRequest(msg))
+	return err
 }
 
 func callSetSiteImageURL(t *testing.T, svc *Service, kind, rawURL string) {

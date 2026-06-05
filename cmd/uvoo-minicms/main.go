@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,8 +45,8 @@ func main() {
 	publicGeo := geof.WithStore(store, "public")
 
 	mux := http.NewServeMux()
-	mux.Handle("/cms.v1.CMSService/", chain(api, ipf.Middleware, adminACL.Middleware, adminGeo.Middleware, auth.Basic{User: cfg.AdminUser, Pass: cfg.AdminPass}.Middleware))
-	mux.Handle("/uploads/", chain(uploads, ipf.Middleware, publicACL.Middleware, publicGeo.Middleware))
+	mux.Handle("/cms.v1.CMSService/", chain(api, ipf.Middleware, adminACL.Middleware, adminGeo.Middleware, sameOrigin(cfg.TrustProxyHeaders), auth.Basic{User: cfg.AdminUser, Pass: cfg.AdminPass}.Middleware))
+	mux.Handle("/uploads/", chain(uploads, ipf.Middleware, publicACL.Middleware, publicGeo.Middleware, cacheUploads))
 	mux.Handle("/admin/", chain(http.StripPrefix("/admin/", admin), ipf.Middleware, adminACL.Middleware, adminGeo.Middleware, auth.Basic{User: cfg.AdminUser, Pass: cfg.AdminPass}.Middleware))
 	mux.Handle("/", chain(pub, ipf.Middleware, publicACL.Middleware, publicGeo.Middleware))
 
@@ -77,6 +78,83 @@ func secureHeaders(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+func cacheUploads(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		next.ServeHTTP(w, r)
+	})
+}
+
+func sameOrigin(trustProxy bool) mw {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if !sameOriginRequest(r, trustProxy) {
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func sameOriginRequest(r *http.Request, trustProxy bool) bool {
+	expected := requestBaseURL(r, trustProxy)
+	for _, raw := range []string{r.Header.Get("Origin"), r.Header.Get("Referer")} {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		u, err := url.Parse(raw)
+		if err != nil || u.Scheme == "" || u.Host == "" {
+			return false
+		}
+		if strings.EqualFold(u.Scheme+"://"+u.Host, expected) {
+			return true
+		}
+		return false
+	}
+	return true
+}
+
+func requestBaseURL(r *http.Request, trustProxy bool) string {
+	scheme := ""
+	if trustProxy {
+		scheme = strings.ToLower(firstHeaderValue(r.Header.Get("X-Forwarded-Proto")))
+		if scheme != "http" && scheme != "https" {
+			scheme = ""
+		}
+	}
+	if scheme == "" && r.TLS != nil {
+		scheme = "https"
+	}
+	if scheme == "" {
+		scheme = "http"
+	}
+	host := r.Host
+	if trustProxy {
+		if forwardedHost := firstHeaderValue(r.Header.Get("X-Forwarded-Host")); forwardedHost != "" {
+			host = forwardedHost
+		}
+	}
+	return scheme + "://" + host
+}
+
+func firstHeaderValue(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	value := strings.TrimSpace(strings.Split(raw, ",")[0])
+	if strings.ContainsAny(value, "\r\n") {
+		return ""
+	}
+	return value
+}
+
 func must(err error) {
 	if err != nil {
 		log.Fatal(err)

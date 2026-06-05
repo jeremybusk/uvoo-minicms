@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -292,6 +293,9 @@ func (s *Service) UploadFile(ctx context.Context, req *connect.Request[structpb.
 	}
 	if int64(len(data)) > s.MaxUploadBytes {
 		return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("upload too large"))
+	}
+	if err := validateUploadContent(name, data); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	name = time.Now().UTC().Format("150405.000-") + name
 	a, err := s.writeUploadAsset(ctx, name, data)
@@ -997,6 +1001,54 @@ func allowedUpload(name string) bool {
 	default:
 		return false
 	}
+}
+
+func validateUploadContent(name string, data []byte) error {
+	if len(data) == 0 {
+		return errors.New("file is empty")
+	}
+	switch ext(name) {
+	case ".png":
+		if len(data) >= 8 && bytes.Equal(data[:8], []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}) {
+			return nil
+		}
+	case ".jpg", ".jpeg":
+		if len(data) >= 3 && data[0] == 0xff && data[1] == 0xd8 && data[2] == 0xff {
+			return nil
+		}
+	case ".gif":
+		if len(data) >= 6 && (bytes.Equal(data[:6], []byte("GIF87a")) || bytes.Equal(data[:6], []byte("GIF89a"))) {
+			return nil
+		}
+	case ".webp":
+		if len(data) >= 12 && bytes.Equal(data[:4], []byte("RIFF")) && bytes.Equal(data[8:12], []byte("WEBP")) {
+			return nil
+		}
+	case ".avif":
+		if len(data) >= 12 && bytes.Equal(data[4:8], []byte("ftyp")) {
+			brand := string(data[8:12])
+			if brand == "avif" || brand == "avis" || brand == "mif1" {
+				return nil
+			}
+		}
+	case ".ico":
+		if len(data) >= 4 && data[0] == 0 && data[1] == 0 && data[2] == 1 && data[3] == 0 {
+			return nil
+		}
+	case ".pdf":
+		if bytes.HasPrefix(data, []byte("%PDF-")) {
+			return nil
+		}
+	case ".txt", ".md", ".csv":
+		if bytes.IndexByte(data, 0) >= 0 {
+			return errors.New("text uploads must not contain NUL bytes")
+		}
+		if utf8.Valid(data) {
+			return nil
+		}
+		return errors.New("text uploads must be valid UTF-8")
+	}
+	return errors.New("file content does not match the allowed extension")
 }
 
 func decodeDataURL(dataURL string, maxBytes int64) ([]byte, error) {
