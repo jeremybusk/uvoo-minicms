@@ -37,15 +37,25 @@ else
   echo "skipping package-lock license check: install jq" >&2
 fi
 
-if command -v license-checker-rseidelsohn >/dev/null 2>&1; then
+if [ -x "$ROOT/web/node_modules/.bin/license-checker-rseidelsohn" ]; then
   (
     cd "$ROOT/web"
-    license-checker-rseidelsohn --production --excludePrivatePackages --onlyAllow "$ALLOWED_NPM"
+    ./node_modules/.bin/license-checker-rseidelsohn --production --excludePrivatePackages --summary --onlyAllow "$ALLOWED_NPM"
+  ) || status=1
+elif command -v license-checker-rseidelsohn >/dev/null 2>&1; then
+  (
+    cd "$ROOT/web"
+    license-checker-rseidelsohn --production --excludePrivatePackages --summary --onlyAllow "$ALLOWED_NPM"
+  ) || status=1
+elif [ -x "$ROOT/web/node_modules/.bin/license-checker" ]; then
+  (
+    cd "$ROOT/web"
+    ./node_modules/.bin/license-checker --production --excludePrivatePackages --summary --onlyAllow "$ALLOWED_NPM"
   ) || status=1
 elif command -v license-checker >/dev/null 2>&1; then
   (
     cd "$ROOT/web"
-    license-checker --production --excludePrivatePackages --onlyAllow "$ALLOWED_NPM"
+    license-checker --production --excludePrivatePackages --summary --onlyAllow "$ALLOWED_NPM"
   ) || status=1
 else
   echo "skipping npm license scan: install with 'cd web && npm install --save-dev license-checker-rseidelsohn'" >&2

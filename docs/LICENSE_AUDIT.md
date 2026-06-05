@@ -40,7 +40,7 @@ The previous MDXEditor dependency path was removed:
 @mdxeditor/editor -> @codesandbox/sandpack-react -> @codesandbox/sandpack-client -> @codesandbox/nodebox
 ```
 
-The admin Markdown editor now uses CodeMirror 6 directly. `make license-check`
+The admin Markdown editor now uses TOAST UI Editor. `make license-check`
 should remain free of `@codesandbox/nodebox`, Sandpack, and other
 Sustainable Use License packages.
 

@@ -357,7 +357,7 @@ body,
   border-radius: var(--admin-control-radius);
 }
 
-.markdownEditor {
+.toastMarkdownEditor {
   min-height: 540px;
   color: var(--admin-text);
   background: var(--admin-surface);
@@ -366,7 +366,7 @@ body,
   overflow: hidden;
 }
 
-.markdownToolbar {
+.toastAssetBar {
   display: flex;
   align-items: center;
   padding: 8px;
@@ -374,108 +374,95 @@ body,
   border-bottom: 1px solid var(--admin-border);
 }
 
-.markdownToolbar .ant-btn,
-.markdownToolbar .ant-select-selector {
+.toastAssetBar .ant-select-selector {
   color: var(--admin-text) !important;
   background: var(--admin-surface) !important;
   border-color: var(--admin-border) !important;
 }
 
-.markdownToolbar .ant-btn:hover,
-.markdownToolbar .ant-select-selector:hover {
+.toastAssetBar .ant-select-selector:hover {
   color: var(--admin-primary) !important;
   border-color: var(--admin-primary) !important;
 }
 
-.markdownAssetSelect {
-  width: min(280px, 70vw);
+.toastAssetSelect {
+  width: min(320px, 80vw);
 }
 
-.markdownCodeMirror {
+.toastMarkdownEditor .toastui-editor-defaultUI {
+  border: 0;
+}
+
+.toastMarkdownEditor .toastui-editor-toolbar,
+.toastMarkdownEditor .toastui-editor-defaultUI-toolbar {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+}
+
+.toastMarkdownEditor .toastui-editor-toolbar-icons,
+.toastMarkdownEditor .toastui-editor-md-tab-container,
+.toastMarkdownEditor .toastui-editor-mode-switch {
+  border-color: var(--admin-border);
+}
+
+.toastMarkdownEditor .toastui-editor-defaultUI,
+.toastMarkdownEditor .toastui-editor-main,
+.toastMarkdownEditor .toastui-editor-main-container,
+.toastMarkdownEditor .toastui-editor-md-container,
+.toastMarkdownEditor .toastui-editor-ww-container,
+.toastMarkdownEditor .toastui-editor-md-preview,
+.toastMarkdownEditor .ProseMirror,
+.toastMarkdownEditor .toastui-editor-md-splitter {
+  color: var(--admin-text);
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.toastMarkdownEditor .toastui-editor-md-tab-container .tab-item,
+.toastMarkdownEditor .toastui-editor-mode-switch .tab-item,
+.toastMarkdownEditor .toastui-editor-dropdown-toolbar {
+  color: var(--admin-text);
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+}
+
+.toastMarkdownEditor .toastui-editor-md-tab-container .tab-item.active,
+.toastMarkdownEditor .toastui-editor-mode-switch .tab-item.active {
+  color: var(--admin-primary);
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.toastMarkdownEditor .toastui-editor-contents,
+.toastMarkdownEditor .toastui-editor-contents p,
+.toastMarkdownEditor .toastui-editor-contents li,
+.toastMarkdownEditor .toastui-editor-contents th,
+.toastMarkdownEditor .toastui-editor-contents td,
+.toastMarkdownEditor .toastui-editor-md-container .toastui-editor,
+.toastMarkdownEditor .toastui-editor-md-container .toastui-editor textarea {
+  color: var(--admin-text);
+}
+
+.toastMarkdownEditor .toastui-editor-contents pre,
+.toastMarkdownEditor .toastui-editor-contents code,
+.toastMarkdownEditor .toastui-editor-md-container .toastui-editor textarea {
   background: var(--admin-surface-2);
 }
 
-.mdField .cm-editor,
-.mdField .cm-gutters {
-  color: var(--admin-text) !important;
-  background: var(--admin-surface-2) !important;
+.toastMarkdownEditor .toastui-editor-popup,
+.toastMarkdownEditor .toastui-editor-popup-body,
+.toastMarkdownEditor .toastui-editor-popup-add-image,
+.toastMarkdownEditor .toastui-editor-popup-add-link {
+  color: var(--admin-text);
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
 }
 
-.mdField .cm-editor {
-  border: 0;
-  border-radius: 0;
-  overflow: hidden;
-}
-
-.mdField .cm-scroller {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 14px;
-  line-height: 1.55;
-}
-
-.mdField .cm-line,
-.mdField .cm-content {
-  color: var(--admin-text) !important;
-}
-
-.mdField .cm-cursor,
-.mdField .cm-dropCursor {
-  border-left-color: var(--admin-text) !important;
-  border-left-width: 2px !important;
-}
-
-.mdField .cm-focused .cm-cursor {
-  border-left-color: var(--admin-primary) !important;
-}
-
-.mdField .cm-activeLine,
-.mdField .cm-activeLineGutter {
-  background: rgba(var(--admin-primary-rgb), .1) !important;
-}
-
-.mdField .cm-selectionBackground,
-.mdField .cm-focused .cm-selectionBackground {
-  background: rgba(var(--admin-primary-rgb), .28) !important;
-}
-
-.mdField .cm-content ::selection {
-  color: var(--admin-text) !important;
-  background: rgba(var(--admin-primary-rgb), .28) !important;
-}
-
-.mdField .dark-theme .cm-editor,
-.mdField .dark-theme .cm-gutters {
-  color: #e5edf8 !important;
-  background: #111827 !important;
-}
-
-.mdField .dark-theme .cm-line,
-.mdField .dark-theme .cm-content {
-  color: #e5edf8 !important;
-}
-
-.mdField .dark-theme .cm-cursor,
-.mdField .dark-theme .cm-dropCursor,
-.mdField .dark-theme .cm-focused .cm-cursor {
-  border-left-color: #f8fafc !important;
-}
-
-.mdField .dark-theme .cm-selectionBackground,
-.mdField .dark-theme .cm-focused .cm-selectionBackground,
-.mdField .dark-theme .cm-activeLine,
-.mdField .dark-theme .cm-activeLineGutter {
-  background: #c7ddff !important;
-}
-
-.mdField .dark-theme .cm-activeLine,
-.mdField .dark-theme .cm-activeLine *,
-.mdField .dark-theme .cm-activeLineGutter {
-  color: #07111f !important;
-}
-
-.mdField .dark-theme .cm-content ::selection {
-  color: #07111f !important;
-  background: #c7ddff !important;
+.toastMarkdownEditor .toastui-editor-popup input,
+.toastMarkdownEditor .toastui-editor-popup textarea {
+  color: var(--admin-text);
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
 }
 
 .sourceEditor,
