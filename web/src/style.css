@@ -357,7 +357,7 @@ body,
   border-radius: var(--admin-control-radius);
 }
 
-.toastMarkdownEditor {
+.milkdownMarkdownEditor {
   min-height: 540px;
   color: var(--admin-text);
   background: var(--admin-surface);
@@ -366,7 +366,7 @@ body,
   overflow: hidden;
 }
 
-.toastAssetBar {
+.milkdownAssetBar {
   display: flex;
   align-items: center;
   padding: 8px;
@@ -374,80 +374,66 @@ body,
   border-bottom: 1px solid var(--admin-border);
 }
 
-.toastAssetBar .ant-select-selector {
+.milkdownAssetBar .ant-select-selector {
   color: var(--admin-text) !important;
   background: var(--admin-surface) !important;
   border-color: var(--admin-border) !important;
 }
 
-.toastAssetBar .ant-select-selector:hover {
+.milkdownAssetBar .ant-select-selector:hover {
   color: var(--admin-primary) !important;
   border-color: var(--admin-primary) !important;
 }
 
-.toastAssetSelect {
+.milkdownAssetSelect {
   width: min(320px, 80vw);
 }
 
-.toastMarkdownEditor .toastui-editor-defaultUI {
-  border: 0;
-}
-
-.toastMarkdownEditor .toastui-editor-toolbar,
-.toastMarkdownEditor .toastui-editor-defaultUI-toolbar {
-  background: var(--admin-surface-2);
-  border-color: var(--admin-border);
-}
-
-.toastMarkdownEditor .toastui-editor-toolbar-icons,
-.toastMarkdownEditor .toastui-editor-md-tab-container,
-.toastMarkdownEditor .toastui-editor-mode-switch {
-  border-color: var(--admin-border);
-}
-
-.toastMarkdownEditor .toastui-editor-defaultUI,
-.toastMarkdownEditor .toastui-editor-main,
-.toastMarkdownEditor .toastui-editor-main-container,
-.toastMarkdownEditor .toastui-editor-md-container,
-.toastMarkdownEditor .toastui-editor-ww-container,
-.toastMarkdownEditor .toastui-editor-md-preview,
-.toastMarkdownEditor .ProseMirror,
-.toastMarkdownEditor .toastui-editor-md-splitter {
+.milkdownMarkdownEditor .milkdown {
+  min-height: 540px;
+  padding: 0;
   color: var(--admin-text);
   background: var(--admin-surface);
-  border-color: var(--admin-border);
+  --crepe-color-background: var(--admin-surface);
+  --crepe-color-on-background: var(--admin-text);
+  --crepe-color-surface: var(--admin-surface-2);
+  --crepe-color-surface-low: var(--admin-bg-soft);
+  --crepe-color-on-surface: var(--admin-text);
+  --crepe-color-on-surface-variant: var(--admin-muted);
+  --crepe-color-outline: var(--admin-border);
+  --crepe-color-primary: var(--admin-primary);
+  --crepe-color-secondary: rgba(var(--admin-primary-rgb), .14);
+  --crepe-color-on-secondary: var(--admin-text);
+  --crepe-color-inverse: var(--admin-text);
+  --crepe-color-on-inverse: var(--admin-surface);
+  --crepe-color-inline-code: var(--admin-primary);
+  --crepe-color-error: #b42318;
+  --crepe-color-hover: rgba(var(--admin-primary-rgb), .10);
+  --crepe-color-selected: rgba(var(--admin-primary-rgb), .18);
+  --crepe-color-inline-area: rgba(var(--admin-primary-rgb), .12);
+  --crepe-font-title: inherit;
+  --crepe-font-default: inherit;
+  --crepe-font-code: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.toastMarkdownEditor .toastui-editor-md-tab-container .tab-item,
-.toastMarkdownEditor .toastui-editor-mode-switch .tab-item,
-.toastMarkdownEditor .toastui-editor-dropdown-toolbar {
+.milkdownMarkdownEditor .milkdown .editor {
+  min-height: 540px;
+}
+
+.milkdownMarkdownEditor .milkdown .ProseMirror {
+  min-height: 500px;
+  padding: 28px 32px;
+  outline: none;
+}
+
+.milkdownMarkdownEditor .milkdown p,
+.milkdownMarkdownEditor .milkdown li,
+.milkdownMarkdownEditor .milkdown th,
+.milkdownMarkdownEditor .milkdown td {
   color: var(--admin-text);
-  background: var(--admin-surface-2);
-  border-color: var(--admin-border);
 }
 
-.toastMarkdownEditor .toastui-editor-md-tab-container .tab-item.active,
-.toastMarkdownEditor .toastui-editor-mode-switch .tab-item.active {
-  color: var(--admin-primary);
-  background: var(--admin-surface);
-  border-color: var(--admin-border);
-}
-
-.toastMarkdownEditor .toastui-editor-contents,
-.toastMarkdownEditor .toastui-editor-contents p,
-.toastMarkdownEditor .toastui-editor-contents li,
-.toastMarkdownEditor .toastui-editor-contents th,
-.toastMarkdownEditor .toastui-editor-contents td,
-.toastMarkdownEditor .toastui-editor-md-container .toastui-editor,
-.toastMarkdownEditor .toastui-editor-md-container .toastui-editor textarea {
-  color: var(--admin-text);
-}
-
-.toastMarkdownEditor .toastui-editor-md-container .toastui-editor textarea {
-  background: var(--admin-surface-2);
-}
-
-.toastMarkdownEditor .toastui-editor-contents :not(pre) > code {
+.milkdownMarkdownEditor .milkdown :not(pre) > code {
   color: var(--admin-primary);
   background: rgba(var(--admin-primary-rgb), .12);
   border: 1px solid rgba(var(--admin-primary-rgb), .22);
@@ -456,31 +442,22 @@ body,
   font-size: .92em;
 }
 
-.toastMarkdownEditor .toastui-editor-contents pre {
+.milkdownMarkdownEditor .milkdown pre {
   color: var(--admin-text);
   background: var(--admin-surface-2);
   border: 1px solid var(--admin-border);
   border-radius: var(--admin-control-radius);
 }
 
-.toastMarkdownEditor .toastui-editor-contents pre code {
+.milkdownMarkdownEditor .milkdown pre code {
   color: inherit;
   background: transparent;
   border: 0;
   padding: 0;
 }
 
-.toastMarkdownEditor .toastui-editor-popup,
-.toastMarkdownEditor .toastui-editor-popup-body,
-.toastMarkdownEditor .toastui-editor-popup-add-image,
-.toastMarkdownEditor .toastui-editor-popup-add-link {
-  color: var(--admin-text);
-  background: var(--admin-surface);
-  border-color: var(--admin-border);
-}
-
-.toastMarkdownEditor .toastui-editor-popup input,
-.toastMarkdownEditor .toastui-editor-popup textarea {
+.milkdownMarkdownEditor .milkdown input,
+.milkdownMarkdownEditor .milkdown textarea {
   color: var(--admin-text);
   background: var(--admin-surface-2);
   border-color: var(--admin-border);

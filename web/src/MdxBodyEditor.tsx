@@ -1,22 +1,27 @@
 import { useEffect, useRef } from 'react'
 import { Select } from 'antd'
-import Editor from '@toast-ui/editor'
-import Prism from 'prismjs'
-import codeSyntaxHighlight from '@toast-ui/editor-plugin-code-syntax-highlight'
-import '@toast-ui/editor/dist/toastui-editor.css'
-import '@toast-ui/editor/dist/theme/toastui-editor-dark.css'
-import 'prismjs/themes/prism-tomorrow.css'
-import '@toast-ui/editor-plugin-code-syntax-highlight/dist/toastui-editor-plugin-code-syntax-highlight.css'
-import 'prismjs/components/prism-bash.js'
-import 'prismjs/components/prism-css.js'
-import 'prismjs/components/prism-go.js'
-import 'prismjs/components/prism-javascript.js'
-import 'prismjs/components/prism-json.js'
-import 'prismjs/components/prism-markdown.js'
-import 'prismjs/components/prism-python.js'
-import 'prismjs/components/prism-sql.js'
-import 'prismjs/components/prism-typescript.js'
-import 'prismjs/components/prism-yaml.js'
+import { CrepeBuilder } from '@milkdown/crepe/builder'
+import { blockEdit } from '@milkdown/crepe/feature/block-edit'
+import { cursor } from '@milkdown/crepe/feature/cursor'
+import { imageBlock } from '@milkdown/crepe/feature/image-block'
+import { linkTooltip } from '@milkdown/crepe/feature/link-tooltip'
+import { listItem } from '@milkdown/crepe/feature/list-item'
+import { placeholder } from '@milkdown/crepe/feature/placeholder'
+import { table } from '@milkdown/crepe/feature/table'
+import { toolbar } from '@milkdown/crepe/feature/toolbar'
+import type { ListenerManager } from '@milkdown/kit/plugin/listener'
+import { insert, replaceAll } from '@milkdown/kit/utils'
+import '@milkdown/crepe/theme/common/prosemirror.css'
+import '@milkdown/crepe/theme/common/reset.css'
+import '@milkdown/crepe/theme/common/block-edit.css'
+import '@milkdown/crepe/theme/common/cursor.css'
+import '@milkdown/crepe/theme/common/image-block.css'
+import '@milkdown/crepe/theme/common/link-tooltip.css'
+import '@milkdown/crepe/theme/common/list-item.css'
+import '@milkdown/crepe/theme/common/placeholder.css'
+import '@milkdown/crepe/theme/common/table.css'
+import '@milkdown/crepe/theme/common/toolbar.css'
+import '@milkdown/crepe/theme/frame.css'
 
 type MdxBodyEditorProps = {
   adminDark: boolean
@@ -27,17 +32,12 @@ type MdxBodyEditorProps = {
   uploadImage: (file: File) => Promise<string>
 }
 
-type ToastEditorWithEvents = Editor & {
-  eventEmitter?: {
-    emit: (name: string, payload?: unknown) => void
-  }
-}
-
 export default function MdxBodyEditor({ adminDark, editorKey, imageSuggestions, markdown, onChange, uploadImage }: MdxBodyEditorProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
-  const editorRef = useRef<Editor | null>(null)
+  const editorRef = useRef<CrepeBuilder | null>(null)
   const onChangeRef = useRef(onChange)
   const uploadImageRef = useRef(uploadImage)
+  const lastMarkdownRef = useRef(markdown)
 
   useEffect(() => {
     onChangeRef.current = onChange
@@ -50,62 +50,71 @@ export default function MdxBodyEditor({ adminDark, editorKey, imageSuggestions, 
   useEffect(() => {
     if (!hostRef.current) return
 
-    const editor = new Editor({
-      el: hostRef.current,
-      initialValue: markdown,
-      initialEditType: 'wysiwyg',
-      // The vertical split preview can call posAtCoords during hidden/resizing
-      // states and crash in the bundled editor. WYSIWYG mode does not need it.
-      previewStyle: 'tab',
-      hideModeSwitch: true,
-      minHeight: '540px',
-      autofocus: false,
-      usageStatistics: false,
-      theme: adminDark ? 'dark' : undefined,
-      plugins: [[codeSyntaxHighlight, { highlighter: Prism }]],
-      events: {
-        change: () => {
-          onChangeRef.current(editor.getMarkdown())
-        }
-      },
-      hooks: {
-        addImageBlobHook: (blob, callback) => {
-          uploadImageRef.current(blob as File)
-            .then(url => callback(url, blob instanceof File ? blob.name : 'image'))
-            .catch(() => undefined)
-        }
-      }
+    let cancelled = false
+    const editor = new CrepeBuilder({
+      root: hostRef.current,
+      defaultValue: markdown
+    })
+      .addFeature(cursor)
+      .addFeature(listItem)
+      .addFeature(linkTooltip)
+      .addFeature(imageBlock, {
+        onUpload: (file: File) => uploadImageRef.current(file),
+        inlineOnUpload: (file: File) => uploadImageRef.current(file),
+        blockOnUpload: (file: File) => uploadImageRef.current(file)
+      })
+      .addFeature(blockEdit)
+      .addFeature(toolbar)
+      .addFeature(placeholder, {
+        text: 'Start writing...',
+        mode: 'block'
+      })
+      .addFeature(table)
+
+    editor.on((listener: ListenerManager) => {
+      listener.markdownUpdated((_ctx, nextMarkdown) => {
+        lastMarkdownRef.current = nextMarkdown
+        onChangeRef.current(nextMarkdown)
+      })
     })
 
-    const editorWithEvents = editor as ToastEditorWithEvents
-    editorWithEvents.eventEmitter?.emit('toggleScrollSync', false)
-    editorRef.current = editor
+    editor.create()
+      .then(() => {
+        if (cancelled) {
+          editor.destroy().catch(() => undefined)
+          return
+        }
+        editorRef.current = editor
+      })
+      .catch(() => undefined)
+
     return () => {
-      editor.destroy()
+      cancelled = true
       editorRef.current = null
+      editor.destroy().catch(() => undefined)
     }
   }, [adminDark, editorKey])
 
   useEffect(() => {
     const editor = editorRef.current
     if (!editor) return
-    if (editor.getMarkdown() !== markdown) {
-      editor.setMarkdown(markdown, false)
+    if (lastMarkdownRef.current !== markdown) {
+      lastMarkdownRef.current = markdown
+      editor.editor.action(replaceAll(markdown, true))
     }
   }, [markdown])
 
   function insertImage(url: string) {
     const editor = editorRef.current
     if (!editor) return
-    editor.exec('addImage', { imageUrl: url, altText: 'image' })
-    editor.focus()
+    editor.editor.action(insert(`\n\n![image](${url})\n`))
   }
 
-  return <div className={adminDark ? 'toastMarkdownEditor dark-theme' : 'toastMarkdownEditor'}>
-    {imageSuggestions.length > 0 && <div className="toastAssetBar">
+  return <div className={adminDark ? 'milkdownMarkdownEditor milkdownDark' : 'milkdownMarkdownEditor'}>
+    {imageSuggestions.length > 0 && <div className="milkdownAssetBar">
       <Select
         size="small"
-        className="toastAssetSelect"
+        className="milkdownAssetSelect"
         placeholder="Insert uploaded image"
         value={undefined}
         options={imageSuggestions.map(url => ({ label: url, value: url }))}
