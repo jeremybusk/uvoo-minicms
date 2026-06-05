@@ -6,6 +6,7 @@ import './style.css'
 import { api, ACLRule, ACLSettings, Asset, ImportOptions, ImportResult, NavItem, Page, PageRevision, SiteSettings, ThemeHistory } from './api'
 
 const MdxBodyEditor = React.lazy(() => import('./MdxBodyEditor'))
+const adminThemeStorageKey = 'uvoo-minicms-admin-theme'
 
 const palettes = {
   slate: { colorPrimary: '#2563eb', colorBgLayout: '#f4f7fb', colorText: '#172033', colorBorder: '#d8dee9' },
@@ -74,6 +75,20 @@ function isImage(url:string) {
 function assetMarkdown(asset: Asset) {
   return isImage(asset.url) ? `![${asset.name}](${asset.url})` : `[${asset.name}](${asset.url})`
 }
+function storedAdminDark() {
+  try {
+    return localStorage.getItem(adminThemeStorageKey) === 'dark'
+  } catch {
+    return false
+  }
+}
+function rememberAdminTheme(dark: boolean) {
+  try {
+    localStorage.setItem(adminThemeStorageKey, dark ? 'dark' : 'light')
+  } catch {
+    // Ignore private browsing or storage policy failures.
+  }
+}
 function readFileData(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
@@ -116,7 +131,7 @@ function Root() {
   const [palette, setPalette] = useState<Palette>('slate')
   const [customPrimary, setCustomPrimary] = useState('#386bc0')
   const [customSecondary, setCustomSecondary] = useState('#64748b')
-  const [adminDark, setAdminDark] = useState(false)
+  const [adminDark, setAdminDark] = useState(storedAdminDark)
   const [themeStyle, setThemeStyle] = useState<ThemeStyle>('soft')
   const [publicTheme, setPublicTheme] = useState<'light'|'dark'>('light')
   const [publicThemeStyle, setPublicThemeStyle] = useState<ThemeStyle>('soft')
@@ -189,6 +204,7 @@ function Root() {
     const r = await api.getSettings()
     settingsForm.setFieldsValue(r.settings)
     setAdminDark(r.settings.admin_theme === 'dark')
+    rememberAdminTheme(r.settings.admin_theme === 'dark')
     setCustomPrimary(r.settings.admin_primary_color || '#386bc0')
     setCustomSecondary(r.settings.admin_secondary_color || '#64748b')
     if (r.settings.admin_palette) setPalette(r.settings.admin_palette)
@@ -450,6 +466,9 @@ function Root() {
     loadACL().catch(e => message.error(e.message))
     loadThemeHistory().catch(e => message.error(e.message))
   }, [])
+  useEffect(() => {
+    rememberAdminTheme(adminDark)
+  }, [adminDark])
   useEffect(() => {
     for (const [key, value] of Object.entries(adminVars)) {
       document.documentElement.style.setProperty(key, String(value))
