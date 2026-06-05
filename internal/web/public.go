@@ -2,6 +2,8 @@ package web
 
 import (
 	"bytes"
+	"crypto/sha1"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"html/template"
@@ -9,20 +11,26 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	chromahtml "github.com/alecthomas/chroma/v2/formatters/html"
 	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/extension"
 	highlighting "github.com/yuin/goldmark-highlighting/v2"
+	"github.com/yuin/goldmark/extension"
 	"uvoo-minicms/internal/db"
 )
 
 type Public struct {
-	Store    *db.Store
-	SiteName string
-	md       goldmark.Markdown
+	Store       *db.Store
+	SiteName    string
+	TrustProxy  bool
+	md          goldmark.Markdown
+	renderMu    sync.RWMutex
+	renderCache map[string]template.HTML
 }
+
+const maxRenderCacheEntries = 256
 
 func NewPublic(st *db.Store, siteName string) *Public {
 	return &Public{Store: st, SiteName: siteName, md: goldmark.New(goldmark.WithExtensions(
@@ -79,7 +87,7 @@ func (p *Public) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"MetaDescription":      "",
 			"Body":                 renderBlogIndex(settings, posts),
 			"Footer":               footer,
-			"MenuHTML":             renderMenu(menu, routePath),
+			"MenuHTML":             p.renderMenuCached(menu, routePath),
 			"NavMenuStyle":         template.HTML(navMenuStyle()),
 			"SearchHTML":           "",
 			"LogoURL":              settings.LogoURL,
@@ -109,7 +117,7 @@ func (p *Public) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	body, err := p.render(page.Markdown)
+	body, err := p.renderCached(renderCacheKey("page", page.UpdatedAt, page.Markdown), page.Markdown)
 	if err != nil {
 		http.Error(w, "render error", 500)
 		return
@@ -129,7 +137,7 @@ func (p *Public) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"MetaDescription":      page.MetaDescription,
 		"Body":                 body,
 		"Footer":               footer,
-		"MenuHTML":             renderMenu(menu, routePath),
+		"MenuHTML":             p.renderMenuCached(menu, routePath),
 		"NavMenuStyle":         template.HTML(navMenuStyle()),
 		"SearchHTML":           "",
 		"LogoURL":              settings.LogoURL,
@@ -179,7 +187,7 @@ func (p *Public) serveSearch(w http.ResponseWriter, r *http.Request, settings db
 		"Title":                "Search",
 		"Body":                 template.HTML(b.String()),
 		"Footer":               template.HTML(""),
-		"MenuHTML":             renderMenu(menuWithBlog(settings), "/search"),
+		"MenuHTML":             p.renderMenuCached(menuWithBlog(settings), "/search"),
 		"NavMenuStyle":         template.HTML(navMenuStyle()),
 		"LogoURL":              settings.LogoURL,
 		"FaviconURL":           settings.FaviconURL,
@@ -208,7 +216,7 @@ func (p *Public) serveBlogFeed(w http.ResponseWriter, r *http.Request, settings 
 		http.Error(w, "feed error", 500)
 		return
 	}
-	base := publicBaseURL(r)
+	base := publicBaseURL(r, p.TrustProxy)
 	w.Header().Set("Content-Type", "application/rss+xml; charset=utf-8")
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
@@ -236,7 +244,7 @@ func (p *Public) renderFooter(settings db.Settings) (template.HTML, error) {
 	if !settings.FooterEnabled {
 		return "", nil
 	}
-	return p.render(settings.FooterMarkdown)
+	return p.renderCached(renderCacheKey("footer", "", settings.FooterMarkdown), settings.FooterMarkdown)
 }
 
 func rssURL(settings db.Settings) string {
@@ -250,20 +258,39 @@ func blogFeedPath(settings db.Settings) string {
 	return cleanNavPath(firstNonEmpty(settings.BlogPath, "/blog")) + "/feed.xml"
 }
 
-func publicBaseURL(r *http.Request) string {
-	scheme := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
-	if scheme == "" {
-		if r.TLS != nil {
-			scheme = "https"
-		} else {
-			scheme = "http"
+func publicBaseURL(r *http.Request, trustProxy bool) string {
+	scheme := ""
+	if trustProxy {
+		scheme = strings.ToLower(firstHeaderValue(r.Header.Get("X-Forwarded-Proto")))
+		if scheme != "http" && scheme != "https" {
+			scheme = ""
 		}
 	}
+	if scheme == "" && r.TLS != nil {
+		scheme = "https"
+	}
+	if scheme == "" {
+		scheme = "http"
+	}
 	host := r.Host
-	if forwardedHost := strings.TrimSpace(r.Header.Get("X-Forwarded-Host")); forwardedHost != "" {
-		host = forwardedHost
+	if trustProxy {
+		forwardedHost := firstHeaderValue(r.Header.Get("X-Forwarded-Host"))
+		if forwardedHost != "" {
+			host = forwardedHost
+		}
 	}
 	return scheme + "://" + host
+}
+
+func firstHeaderValue(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	value := strings.TrimSpace(strings.Split(raw, ",")[0])
+	if strings.ContainsAny(value, "\r\n") {
+		return ""
+	}
+	return value
 }
 
 func absoluteURL(base, path string) string {
@@ -365,6 +392,59 @@ func (p *Public) render(markdown string) (template.HTML, error) {
 		html = strings.ReplaceAll(html, token, replacement)
 	}
 	return template.HTML(html), nil
+}
+
+func (p *Public) renderCached(key, markdown string) (template.HTML, error) {
+	return p.cachedHTML(key, func() (template.HTML, error) {
+		return p.render(markdown)
+	})
+}
+
+func (p *Public) renderMenuCached(items []db.NavItem, currentPath string) template.HTML {
+	html, _ := p.cachedHTML(menuCacheKey(items, currentPath), func() (template.HTML, error) {
+		return renderMenu(items, currentPath), nil
+	})
+	return html
+}
+
+func (p *Public) cachedHTML(key string, render func() (template.HTML, error)) (template.HTML, error) {
+	p.renderMu.RLock()
+	if p.renderCache != nil {
+		if html, ok := p.renderCache[key]; ok {
+			p.renderMu.RUnlock()
+			return html, nil
+		}
+	}
+	p.renderMu.RUnlock()
+
+	html, err := render()
+	if err != nil {
+		return "", err
+	}
+	p.renderMu.Lock()
+	if p.renderCache == nil || len(p.renderCache) >= maxRenderCacheEntries {
+		p.renderCache = map[string]template.HTML{}
+	}
+	p.renderCache[key] = html
+	p.renderMu.Unlock()
+	return html, nil
+}
+
+func renderCacheKey(scope, version, markdown string) string {
+	sum := sha1.Sum([]byte(markdown))
+	return fmt.Sprintf("%s:%s:%x", scope, version, sum)
+}
+
+func menuCacheKey(items []db.NavItem, currentPath string) string {
+	raw, err := json.Marshal(struct {
+		Items       []db.NavItem `json:"items"`
+		CurrentPath string       `json:"current_path"`
+	}{Items: items, CurrentPath: cleanNavPath(currentPath)})
+	if err != nil {
+		raw = []byte(currentPath)
+	}
+	sum := sha1.Sum(raw)
+	return fmt.Sprintf("menu:%x", sum)
 }
 
 func (p *Public) expandRichMarkdown(markdown string) (string, map[string]string) {

@@ -10,7 +10,7 @@ A deliberately small Hugo/WordPress-like CMS:
 - Page/post content types plus SEO descriptions for published routes.
 - Simple tags and public search across title, description, tags, and body.
 - Ant Design React admin UI.
-- MDXEditor WYSIWYG-style Markdown editor.
+- Milkdown WYSIWYG Markdown editor.
 - Optional source Markdown editing mode.
 - Links, images, tables, inline code, fenced code blocks, and Mermaid code fences.
 - Safe rich Markdown shortcodes for Font Awesome icons and cards.
@@ -41,8 +41,15 @@ web/                   React + Ant Design admin
 
 ```bash
 cp .env.example .env
-# edit CMS_ADMIN_PASS before exposing the service
+# edit CMS_ADMIN_PASS before starting; required when CMS_ADDR is :8080
 make run
+```
+
+For the two-process development setup, run:
+
+```bash
+make web-install
+make dev
 ```
 
 Open:
@@ -50,7 +57,7 @@ Open:
 - Public site: `http://localhost:8080/`
 - Admin: `http://localhost:8080/admin/`
 
-Default login is `admin` / `change-me` unless changed in `.env`.
+Default login is `admin` / `change-me` unless changed in `.env`. The bare binary defaults to loopback, and the server refuses to start with a default/empty password on non-loopback bind addresses such as `:8080`. Set `CMS_ADMIN_PASS` before running Docker or exposing the service.
 
 ## Non-Docker Linux Build
 
@@ -74,9 +81,10 @@ A user can run the archive like this:
 tar -xzf uvoo-minicms-*.tar.gz
 cd uvoo-minicms-*
 cp .env.example .env
-# edit CMS_ADMIN_PASS
 ./run.sh
 ```
+
+If `.env` still has a placeholder password, `run.sh` generates a strong `CMS_ADMIN_PASS`, writes it back to `.env`, and prints it once.
 
 The binary must be built for the same Linux libc family it will run on. Copying `/app/uvoo-minicms` out of the Alpine Docker image can fail on Ubuntu/Debian with `cannot execute: required file not found` because that container binary expects Alpine musl libraries. Use `scripts/package.sh` on the target distro, or publish separate distro-compatible tarballs.
 
@@ -149,7 +157,7 @@ See [docs/LICENSE_AUDIT.md](docs/LICENSE_AUDIT.md) for scanner setup and the dep
 
 ```bash
 cp .env.example .env
-# edit CMS_ADMIN_PASS
+# edit CMS_ADMIN_PASS before starting
 docker compose up --build
 ```
 
@@ -231,20 +239,24 @@ Icon names map to Font Awesome solid classes, so `{{icon:rocket}}` becomes `fa-s
 
 | Variable | Default | Notes |
 |---|---:|---|
-| `CMS_ADDR` | `:8080` | Listen address. |
+| `CMS_ADDR` | `127.0.0.1:8080` | Listen address. Docker/package examples set `:8080` and require a non-default admin password. |
 | `CMS_SITE_NAME` | `Uvoo-MiniCMS` | Public site name. |
 | `CMS_ADMIN_USER` | `admin` | Basic Auth username. |
-| `CMS_ADMIN_PASS` | `change-me` | Basic Auth password. Change this. |
+| `CMS_ADMIN_PASS` | `change-me` | Basic Auth password. Change this; default/empty passwords are refused on non-loopback bind addresses. |
+| `CMS_ADMIN_RATE_LIMIT` | `0` | Admin/API requests per minute per client IP. `0` disables rate limiting. |
 | `CMS_DATA_DIR` | `./data` | Data root. |
 | `CMS_DB` | `./data/cms.db` | SQLite DB path. |
 | `CMS_UPLOAD_DIR` | `./data/uploads` | Upload directory. |
 | `CMS_WEB_ROOT` | `web/dist` | Admin React build directory. Package installs normally use `/usr/share/uvoo-minicms/web/dist`. |
 | `CMS_MAX_UPLOAD_BYTES` | `26214400` | Max upload size. |
+| `CMS_CSP_MODE` | `enforce` | Content Security Policy mode: `enforce`, `report-only`, or `off`. |
+| `CMS_HSTS_ENABLED` | `false` | Emits `Strict-Transport-Security` on HTTPS requests when enabled. |
+| `CMS_HSTS_MAX_AGE` | `15552000` | HSTS `max-age` in seconds. Ignored when HSTS is disabled. |
 | `CMS_TLS_CERT` | empty | TLS certificate file. Requires `CMS_TLS_KEY`; enables HTTPS when both are set. |
 | `CMS_TLS_KEY` | empty | TLS private key file. Requires `CMS_TLS_CERT`. |
 | `CMS_ALLOW_CIDRS` | empty | Comma-separated CIDRs. Empty means allow all. |
 | `CMS_DENY_CIDRS` | empty | Comma-separated denied CIDRs. |
-| `CMS_TRUST_PROXY_HEADERS` | `false` | Enables `CF-Connecting-IP`, `X-Real-IP`, and `X-Forwarded-For`. Only enable behind trusted reverse proxy. |
+| `CMS_TRUST_PROXY_HEADERS` | `false` | Enables trusted client IP, host, and proto headers from a reverse proxy. Only enable behind a proxy that strips and rewrites them. |
 | `CMS_MAXMIND_DB` | empty | Path to GeoLite2/GeoIP2 Country `.mmdb`. Empty disables geo filtering. |
 | `CMS_ALLOW_COUNTRIES` | empty | ISO country allow list, e.g. `US,CA`. Empty means allow all except denied. |
 | `CMS_DENY_COUNTRIES` | empty | ISO country deny list. |
@@ -254,7 +266,7 @@ Common CLI flags mirror the most useful env vars:
 ```bash
 uvoo-minicms -addr :8443 -db ./data/cms.db -uploads ./data/uploads \
   -web-root /usr/share/uvoo-minicms/web/dist \
-  -admin-user admin -admin-pass 'change-me' \
+  -admin-user admin -admin-pass 'use-a-long-random-password' \
   -allow-cidrs '203.0.113.10/32,2001:db8::/32' \
   -maxmind-db ./GeoLite2-Country.mmdb -allow-countries US,CA \
   -tls-cert ./certs/site.crt -tls-key ./certs/site.key
@@ -263,8 +275,8 @@ uvoo-minicms -addr :8443 -db ./data/cms.db -uploads ./data/uploads \
 Multiple instances can share the same packaged admin React build by pointing each process at the package web root while keeping instance state separate:
 
 ```bash
-uvoo-minicms -addr :8082 -db /var/lib/uvoo-minicms/site-a/cms.db -uploads /var/lib/uvoo-minicms/site-a/uploads -web-root /usr/share/uvoo-minicms/web/dist
-uvoo-minicms -addr :8083 -db /var/lib/uvoo-minicms/site-b/cms.db -uploads /var/lib/uvoo-minicms/site-b/uploads -web-root /usr/share/uvoo-minicms/web/dist
+uvoo-minicms -addr 127.0.0.1:8082 -db /var/lib/uvoo-minicms/site-a/cms.db -uploads /var/lib/uvoo-minicms/site-a/uploads -web-root /usr/share/uvoo-minicms/web/dist
+uvoo-minicms -addr 127.0.0.1:8083 -db /var/lib/uvoo-minicms/site-b/cms.db -uploads /var/lib/uvoo-minicms/site-b/uploads -web-root /usr/share/uvoo-minicms/web/dist
 ```
 
 ## Security ACLs
@@ -280,6 +292,10 @@ The admin `Security` tab adds runtime rules without needing to restart:
 
 - Use TLS directly with `CMS_TLS_CERT`/`CMS_TLS_KEY`, or put it behind HTTPS. Basic Auth is only safe over HTTPS.
 - Set a strong `CMS_ADMIN_PASS`.
+- Set `CMS_ADMIN_RATE_LIMIT` to a reasonable per-minute value if the admin/API is internet-facing.
+- Rate-limited admin/API responses include `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `Retry-After` on `429`.
+- Use `CMS_CSP_MODE=report-only` while testing CSP compatibility on an existing site; use `off` only as a temporary workaround.
+- Set `CMS_HSTS_ENABLED=true` after confirming the site is consistently served over HTTPS. Behind a reverse proxy, also set `CMS_TRUST_PROXY_HEADERS=true` only when the proxy strips and rewrites forwarded headers.
 - Keep `CMS_TRUST_PROXY_HEADERS=false` unless a trusted proxy strips and rewrites those headers.
 - Public uploads are limited to common image/text/document extensions.
 - Raw HTML in Markdown is escaped by default; use Markdown syntax for page content.
@@ -291,7 +307,7 @@ This project uses Connect RPC endpoints but keeps the code minimal by using `goo
 Example:
 
 ```bash
-curl -u admin:change-me \
+curl -u admin:use-a-long-random-password \
   -H 'Content-Type: application/json' \
   -d '{"slug":"home"}' \
   http://localhost:8080/cms.v1.CMSService/GetPage

@@ -68,7 +68,7 @@ func TestSetSiteImageOptimizesLogoAndFavicon(t *testing.T) {
 	}
 }
 
-func TestSetSiteImageOptimizesFromURLAndKeepsExternalSettingURL(t *testing.T) {
+func TestSetSiteImageRejectsLocalURLAndKeepsExternalSettingURL(t *testing.T) {
 	store, err := db.Open(t.TempDir() + "/cms.db")
 	if err != nil {
 		t.Fatal(err)
@@ -82,23 +82,14 @@ func TestSetSiteImageOptimizesFromURLAndKeepsExternalSettingURL(t *testing.T) {
 	}))
 	defer server.Close()
 
-	callSetSiteImageURL(t, svc, "favicon", server.URL+"/favicon.png")
+	if err := callSetSiteImageURLError(svc, "favicon", server.URL+"/favicon.png"); err == nil {
+		t.Fatal("expected local image URL to be rejected")
+	}
+
 	settings, err := store.GetSettings(context.Background(), "Demo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if settings.FaviconURL == "" || settings.FaviconURL == server.URL+"/favicon.png" {
-		t.Fatalf("expected favicon to be downloaded to local uploads, got %#v", settings.FaviconURL)
-	}
-	assets, err := store.ListAssets(context.Background(), 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	w, h := imageSize(t, assets[0].Path)
-	if w != 64 || h != 64 {
-		t.Fatalf("favicon should be 64x64, got %dx%d", w, h)
-	}
-
 	settings.LogoURL = "https://cdn.example.com/logo.png"
 	settings, err = store.SaveSettings(context.Background(), settings)
 	if err != nil {
@@ -215,6 +206,33 @@ func TestDeleteAssetRemovesFileAndClearsIdentitySetting(t *testing.T) {
 	}
 }
 
+func TestUploadFileRejectsContentThatDoesNotMatchExtension(t *testing.T) {
+	store, err := db.Open(t.TempDir() + "/cms.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.DB.Close()
+	svc := &Service{Store: store, UploadDir: t.TempDir(), MaxUploadBytes: 2 << 20, SiteName: "Demo"}
+
+	err = callUploadFileError(svc, "not-a-real-image.png", "data:image/png;base64,"+base64.StdEncoding.EncodeToString([]byte("<script>alert(1)</script>")))
+	if err == nil || !strings.Contains(err.Error(), "content does not match") {
+		t.Fatalf("expected mismatched upload to be rejected, got %v", err)
+	}
+}
+
+func TestUploadFileAcceptsUTF8Text(t *testing.T) {
+	store, err := db.Open(t.TempDir() + "/cms.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.DB.Close()
+	svc := &Service{Store: store, UploadDir: t.TempDir(), MaxUploadBytes: 2 << 20, SiteName: "Demo"}
+
+	if err := callUploadFileError(svc, "notes.txt", "data:text/plain;base64,"+base64.StdEncoding.EncodeToString([]byte("hello\n"))); err != nil {
+		t.Fatalf("expected UTF-8 text upload to be accepted: %v", err)
+	}
+}
+
 func callSetSiteImage(t *testing.T, svc *Service, kind, name, data string) {
 	t.Helper()
 	msg, err := structpb.NewStruct(map[string]any{
@@ -241,18 +259,35 @@ func callDeleteAsset(t *testing.T, svc *Service, id int64) {
 	}
 }
 
+func callUploadFileError(svc *Service, name, data string) error {
+	msg, err := structpb.NewStruct(map[string]any{
+		"name": name,
+		"data": data,
+	})
+	if err != nil {
+		return err
+	}
+	_, err = svc.UploadFile(context.Background(), connect.NewRequest(msg))
+	return err
+}
+
 func callSetSiteImageURL(t *testing.T, svc *Service, kind, rawURL string) {
 	t.Helper()
+	if err := callSetSiteImageURLError(svc, kind, rawURL); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func callSetSiteImageURLError(svc *Service, kind, rawURL string) error {
 	msg, err := structpb.NewStruct(map[string]any{
 		"kind": kind,
 		"url":  rawURL,
 	})
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
-	if _, err := svc.SetSiteImage(context.Background(), connect.NewRequest(msg)); err != nil {
-		t.Fatal(err)
-	}
+	_, err = svc.SetSiteImage(context.Background(), connect.NewRequest(msg))
+	return err
 }
 
 func pngDataURL(t *testing.T, w, h int) string {

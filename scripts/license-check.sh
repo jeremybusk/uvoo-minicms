@@ -3,8 +3,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ALLOWED_GO="${ALLOWED_GO:-Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,ISC,BlueOak-1.0.0}"
-ALLOWED_NPM="${ALLOWED_NPM:-Apache-2.0;MIT;BSD-2-Clause;BSD-3-Clause;ISC;BlueOak-1.0.0;0BSD;Python-2.0;CC-BY-4.0;W3C-20150513}"
-ALLOWED_LOCK_PATTERN="${ALLOWED_LOCK_PATTERN:-^(Apache-2.0|MIT|BSD-2-Clause|BSD-3-Clause|ISC|BlueOak-1.0.0|0BSD|Python-2.0|CC-BY-4.0|W3C-20150513)$}"
+ALLOWED_NPM="${ALLOWED_NPM:-Apache-2.0;MIT;BSD-2-Clause;BSD-3-Clause;ISC;BlueOak-1.0.0;0BSD;Python-2.0;CC-BY-4.0;W3C-20150513;(MPL-2.0 OR Apache-2.0)}"
+ALLOWED_LOCK_PATTERN="${ALLOWED_LOCK_PATTERN:-^(Apache-2.0|MIT|BSD-2-Clause|BSD-3-Clause|ISC|BlueOak-1.0.0|0BSD|Python-2.0|CC-BY-4.0|W3C-20150513|\\(MPL-2.0 OR Apache-2.0\\))$}"
 INCLUDE_DEV_LICENSES="${INCLUDE_DEV_LICENSES:-0}"
 status=0
 

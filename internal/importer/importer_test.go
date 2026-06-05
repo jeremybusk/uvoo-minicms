@@ -94,6 +94,19 @@ func TestPreviewWordPressImportsPagesPostsAndMenu(t *testing.T) {
 	}
 }
 
+func TestGetBytesRejectsOversizedResponses(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(strings.Repeat("x", maxFetchBytes+1)))
+	}))
+	defer server.Close()
+
+	_, _, err := (Importer{Client: server.Client()}).getBytes(context.Background(), server.URL)
+	if err == nil || !strings.Contains(err.Error(), "response too large") {
+		t.Fatalf("expected response too large error, got %v", err)
+	}
+}
+
 func TestPreviewHonorsContextDeadline(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(time.Second)

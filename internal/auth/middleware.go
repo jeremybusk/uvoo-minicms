@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"net"
 	"net/http"
@@ -12,13 +13,19 @@ type Basic struct{ User, Pass string }
 func (b Basic) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u, p, ok := r.BasicAuth()
-		if !ok || subtle.ConstantTimeCompare([]byte(u), []byte(b.User)) != 1 || subtle.ConstantTimeCompare([]byte(p), []byte(b.Pass)) != 1 {
+		if !ok || !constantTimeStringEqual(u, b.User) || !constantTimeStringEqual(p, b.Pass) {
 			w.Header().Set("WWW-Authenticate", `Basic realm="uvoo-minicms", charset="UTF-8"`)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func constantTimeStringEqual(a, b string) bool {
+	ah := sha256.Sum256([]byte(a))
+	bh := sha256.Sum256([]byte(b))
+	return subtle.ConstantTimeCompare(ah[:], bh[:]) == 1
 }
 
 func ClientIP(r *http.Request, trustProxy bool) net.IP {

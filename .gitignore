@@ -4,6 +4,7 @@ data.trash/
 trash/
 web/dist/
 web/node_modules/
+web/*.tsbuildinfo
 node_modules/
 .env
 dist/

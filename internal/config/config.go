@@ -16,6 +16,10 @@ type Config struct {
 	WebRoot           string
 	AdminUser         string
 	AdminPass         string
+	AdminRateLimit    int
+	CSPMode           string
+	HSTSEnabled       bool
+	HSTSMaxAge        int
 	SessionTTL        time.Duration
 	AllowedCIDRs      []string
 	DeniedCIDRs       []string
@@ -32,13 +36,17 @@ type Config struct {
 func Load() Config {
 	data := env("CMS_DATA_DIR", "./data")
 	cfg := Config{
-		Addr:              env("CMS_ADDR", ":8080"),
+		Addr:              env("CMS_ADDR", "127.0.0.1:8080"),
 		DataDir:           data,
 		DBPath:            env("CMS_DB", data+"/cms.db"),
 		UploadDir:         env("CMS_UPLOAD_DIR", data+"/uploads"),
 		WebRoot:           env("CMS_WEB_ROOT", "web/dist"),
 		AdminUser:         env("CMS_ADMIN_USER", "admin"),
 		AdminPass:         env("CMS_ADMIN_PASS", "change-me"),
+		AdminRateLimit:    intEnv("CMS_ADMIN_RATE_LIMIT", 0),
+		CSPMode:           env("CMS_CSP_MODE", "enforce"),
+		HSTSEnabled:       boolEnv("CMS_HSTS_ENABLED", false),
+		HSTSMaxAge:        intEnv("CMS_HSTS_MAX_AGE", 15552000),
 		SessionTTL:        dur("CMS_SESSION_TTL", 12*time.Hour),
 		AllowedCIDRs:      csv("CMS_ALLOW_CIDRS"),
 		DeniedCIDRs:       csv("CMS_DENY_CIDRS"),
@@ -61,6 +69,10 @@ func Load() Config {
 	flag.StringVar(&cfg.WebRoot, "web-root", cfg.WebRoot, "admin web asset directory")
 	flag.StringVar(&cfg.AdminUser, "admin-user", cfg.AdminUser, "admin username")
 	flag.StringVar(&cfg.AdminPass, "admin-pass", cfg.AdminPass, "admin password")
+	flag.IntVar(&cfg.AdminRateLimit, "admin-rate-limit", cfg.AdminRateLimit, "admin/API requests per minute per client IP; 0 disables")
+	flag.StringVar(&cfg.CSPMode, "csp-mode", cfg.CSPMode, "Content Security Policy mode: enforce, report-only, or off")
+	flag.BoolVar(&cfg.HSTSEnabled, "hsts-enabled", cfg.HSTSEnabled, "emit Strict-Transport-Security on HTTPS requests")
+	flag.IntVar(&cfg.HSTSMaxAge, "hsts-max-age", cfg.HSTSMaxAge, "Strict-Transport-Security max-age in seconds")
 	flag.StringVar(&allowCIDRs, "allow-cidrs", allowCIDRs, "comma-separated IPv4/IPv6 CIDR allow list")
 	flag.StringVar(&denyCIDRs, "deny-cidrs", denyCIDRs, "comma-separated IPv4/IPv6 CIDR deny list")
 	flag.StringVar(&cfg.MaxMindDBPath, "maxmind-db", cfg.MaxMindDBPath, "MaxMind GeoIP2 country database path")
@@ -74,6 +86,13 @@ func Load() Config {
 	cfg.DeniedCIDRs = split(denyCIDRs, false)
 	cfg.AllowedCountries = split(allowCountries, true)
 	cfg.DeniedCountries = split(denyCountries, true)
+	if cfg.AdminRateLimit < 0 {
+		cfg.AdminRateLimit = 0
+	}
+	if cfg.HSTSMaxAge < 0 {
+		cfg.HSTSMaxAge = 0
+	}
+	cfg.CSPMode = normalizeCSPMode(cfg.CSPMode)
 	return cfg
 }
 
@@ -118,6 +137,25 @@ func int64Env(k string, d int64) int64 {
 		return d
 	}
 	return n
+}
+func intEnv(k string, d int) int {
+	v := strings.TrimSpace(os.Getenv(k))
+	if v == "" {
+		return d
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return d
+	}
+	return n
+}
+func normalizeCSPMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "off", "report-only":
+		return strings.ToLower(strings.TrimSpace(mode))
+	default:
+		return "enforce"
+	}
 }
 func dur(k string, d time.Duration) time.Duration {
 	v := strings.TrimSpace(os.Getenv(k))
