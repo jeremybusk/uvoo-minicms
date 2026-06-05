@@ -426,6 +426,22 @@ body,
   outline: none;
 }
 
+.milkdownMarkdownEditor .milkdown .milkdown-top-bar {
+  border-color: var(--admin-border);
+}
+
+.milkdownMarkdownEditor .milkdown .milkdown-top-bar .top-bar-item svg,
+.milkdownMarkdownEditor .milkdown .milkdown-top-bar .top-bar-heading-button .top-bar-chevron svg {
+  color: var(--admin-muted);
+  fill: var(--admin-muted);
+  stroke: var(--admin-muted);
+}
+
+.milkdownMarkdownEditor .milkdown .milkdown-top-bar .top-bar-item.active svg {
+  color: var(--admin-primary);
+  fill: var(--admin-primary);
+}
+
 .milkdownMarkdownEditor .milkdown p,
 .milkdownMarkdownEditor .milkdown li,
 .milkdownMarkdownEditor .milkdown th,

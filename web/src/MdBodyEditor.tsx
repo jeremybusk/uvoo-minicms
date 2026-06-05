@@ -9,6 +9,7 @@ import { listItem } from '@milkdown/crepe/feature/list-item'
 import { placeholder } from '@milkdown/crepe/feature/placeholder'
 import { table } from '@milkdown/crepe/feature/table'
 import { toolbar } from '@milkdown/crepe/feature/toolbar'
+import { topBar } from '@milkdown/crepe/feature/top-bar'
 import type { ListenerManager } from '@milkdown/kit/plugin/listener'
 import { insert, replaceAll } from '@milkdown/kit/utils'
 import '@milkdown/crepe/theme/common/prosemirror.css'
@@ -21,6 +22,7 @@ import '@milkdown/crepe/theme/common/list-item.css'
 import '@milkdown/crepe/theme/common/placeholder.css'
 import '@milkdown/crepe/theme/common/table.css'
 import '@milkdown/crepe/theme/common/toolbar.css'
+import '@milkdown/crepe/theme/common/top-bar.css'
 import '@milkdown/crepe/theme/frame.css'
 
 type MdBodyEditorProps = {
@@ -64,6 +66,7 @@ export default function MdBodyEditor({ adminDark, editorKey, imageSuggestions, m
         blockOnUpload: (file: File) => uploadImageRef.current(file)
       })
       .addFeature(blockEdit)
+      .addFeature(topBar)
       .addFeature(toolbar)
       .addFeature(placeholder, {
         text: 'Start writing...',
