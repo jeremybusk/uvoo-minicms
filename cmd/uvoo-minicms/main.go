@@ -1,10 +1,13 @@
 package main
 
 import (
+	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"uvoo-minicms/cmsv1connect"
@@ -19,6 +22,7 @@ import (
 
 func main() {
 	cfg := config.Load()
+	must(validateRuntimeSecurity(cfg))
 	must(os.MkdirAll(cfg.UploadDir, 0750))
 	store, err := db.Open(cfg.DBPath)
 	must(err)
@@ -76,4 +80,42 @@ func must(err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func validateRuntimeSecurity(cfg config.Config) error {
+	if insecureAdminPass(cfg.AdminPass) && exposedBind(cfg.Addr) {
+		return errors.New("refusing to start with default or empty CMS_ADMIN_PASS on a non-loopback bind address")
+	}
+	return nil
+}
+
+func insecureAdminPass(pass string) bool {
+	switch strings.TrimSpace(pass) {
+	case "", "change-me", "change-me-now":
+		return true
+	default:
+		return false
+	}
+}
+
+func exposedBind(addr string) bool {
+	host := strings.TrimSpace(addr)
+	if host == "" {
+		return true
+	}
+	if strings.HasPrefix(host, ":") {
+		return true
+	}
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	switch strings.ToLower(host) {
+	case "", "*", "0.0.0.0", "::":
+		return true
+	case "localhost":
+		return false
+	}
+	ip := net.ParseIP(host)
+	return ip == nil || !ip.IsLoopback()
 }

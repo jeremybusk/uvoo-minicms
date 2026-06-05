@@ -24,10 +24,12 @@ import (
 
 	"golang.org/x/net/html"
 	"uvoo-minicms/internal/db"
+	"uvoo-minicms/internal/netguard"
 )
 
 const defaultMaxPages = 100
 const defaultRequestTimeout = 6 * time.Second
+const maxFetchBytes = 8 << 20
 
 type Importer struct {
 	Client *http.Client
@@ -1059,7 +1061,7 @@ func (i Importer) getJSON(ctx context.Context, rawURL string, target any) error 
 func (i Importer) getBytes(ctx context.Context, rawURL string) ([]byte, string, error) {
 	client := i.Client
 	if client == nil {
-		client = &http.Client{Timeout: defaultRequestTimeout}
+		client = netguard.NewHTTPClient(defaultRequestTimeout)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
@@ -1085,8 +1087,14 @@ func (i Importer) getBytes(ctx context.Context, rawURL string) ([]byte, string, 
 		defer gz.Close()
 		reader = gz
 	}
-	body, err := io.ReadAll(io.LimitReader(reader, 8<<20))
-	return body, resp.Header.Get("Content-Type"), err
+	body, err := io.ReadAll(io.LimitReader(reader, maxFetchBytes+1))
+	if err != nil {
+		return nil, resp.Header.Get("Content-Type"), err
+	}
+	if len(body) > maxFetchBytes {
+		return nil, resp.Header.Get("Content-Type"), errors.New("response too large")
+	}
+	return body, resp.Header.Get("Content-Type"), nil
 }
 
 func wpPostToPage(base *url.URL, post wpPost, contentType string, publish, advanced bool) Page {

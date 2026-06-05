@@ -50,7 +50,7 @@ Open:
 - Public site: `http://localhost:8080/`
 - Admin: `http://localhost:8080/admin/`
 
-Default login is `admin` / `change-me` unless changed in `.env`.
+Default login is `admin` / `change-me` unless changed in `.env`. The server refuses to start with the default password on non-loopback bind addresses, so set `CMS_ADMIN_PASS` before running Docker or exposing the service.
 
 ## Non-Docker Linux Build
 
@@ -234,7 +234,7 @@ Icon names map to Font Awesome solid classes, so `{{icon:rocket}}` becomes `fa-s
 | `CMS_ADDR` | `:8080` | Listen address. |
 | `CMS_SITE_NAME` | `Uvoo-MiniCMS` | Public site name. |
 | `CMS_ADMIN_USER` | `admin` | Basic Auth username. |
-| `CMS_ADMIN_PASS` | `change-me` | Basic Auth password. Change this. |
+| `CMS_ADMIN_PASS` | `change-me` | Basic Auth password. Change this; default/empty passwords are refused on non-loopback bind addresses. |
 | `CMS_DATA_DIR` | `./data` | Data root. |
 | `CMS_DB` | `./data/cms.db` | SQLite DB path. |
 | `CMS_UPLOAD_DIR` | `./data/uploads` | Upload directory. |

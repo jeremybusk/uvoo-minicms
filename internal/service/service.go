@@ -26,6 +26,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"uvoo-minicms/internal/db"
 	"uvoo-minicms/internal/importer"
+	"uvoo-minicms/internal/netguard"
 )
 
 type Service struct {
@@ -241,7 +242,7 @@ func (s *Service) ImportPreview(ctx context.Context, req *connect.Request[struct
 	defer cancel()
 	opts := importOptions(fields(req))
 	opts.PreviewOnly = true
-	result, err := importer.Importer{Client: &http.Client{Timeout: 4 * time.Second}}.Preview(ctx, opts)
+	result, err := importer.Importer{Client: netguard.NewHTTPClient(4 * time.Second)}.Preview(ctx, opts)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, connect.NewError(connect.CodeDeadlineExceeded, errors.New("import preview timed out after 15 seconds; the source site did not respond quickly enough"))
@@ -259,7 +260,7 @@ func (s *Service) ImportSite(ctx context.Context, req *connect.Request[structpb.
 			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("upload directory %q is not writable: %w; run with -uploads set to a writable directory or fix ownership/permissions", s.UploadDir, err))
 		}
 	}
-	result, err := importer.Importer{Client: &http.Client{Timeout: 10 * time.Second}}.Import(ctx, s.Store, s.UploadDir, s.SiteName, opts)
+	result, err := importer.Importer{Client: netguard.NewHTTPClient(10 * time.Second)}.Import(ctx, s.Store, s.UploadDir, s.SiteName, opts)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, connect.NewError(connect.CodeDeadlineExceeded, errors.New("import timed out after 3 minutes; try a smaller max page count or check the source site"))
@@ -1031,13 +1032,16 @@ func siteImageBytes(ctx context.Context, dataURL, rawURL string, maxBytes int64)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return nil, errors.New("valid http or https image URL required")
 	}
+	if err := netguard.ValidateURL(u); err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "Uvoo-MiniCMS Admin/1.0")
 	req.Header.Set("Accept", "image/png,image/jpeg;q=0.9,*/*;q=0.1")
-	client := &http.Client{Timeout: 12 * time.Second}
+	client := netguard.NewHTTPClient(12 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
