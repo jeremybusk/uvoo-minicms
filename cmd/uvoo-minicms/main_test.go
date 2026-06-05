@@ -5,7 +5,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"uvoo-minicms/internal/auth"
 	"uvoo-minicms/internal/config"
 )
 
@@ -91,6 +93,56 @@ func TestSameOriginMiddlewareRejectsUntrustedForwardedOrigin(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected untrusted forwarded origin to be rejected, got %d", rec.Code)
+	}
+}
+
+func TestAdminAPIMiddlewareBehindProxyWithRateLimit(t *testing.T) {
+	limiter := auth.NewRateLimiter(1, time.Minute, true)
+	handler := chain(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), sameOrigin(true), limiter.Middleware)
+
+	req := httptest.NewRequest(http.MethodPost, "http://backend/cms.v1.CMSService/GetSettings", nil)
+	req.Host = "backend"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-Host", "cms.example")
+	req.Header.Set("X-Forwarded-For", "203.0.113.10")
+	req.Header.Set("Origin", "https://cms.example")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected first proxied same-origin API request to pass, got %d", rec.Code)
+	}
+	if rec.Header().Get("X-RateLimit-Remaining") != "0" {
+		t.Fatalf("expected remaining limit header to be 0, got %#v", rec.Header())
+	}
+
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected second proxied API request to be rate limited, got %d", rec.Code)
+	}
+}
+
+func TestAdminAPIMiddlewareRejectsCrossOriginBeforeRateLimit(t *testing.T) {
+	limiter := auth.NewRateLimiter(1, time.Minute, true)
+	handler := chain(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), sameOrigin(true), limiter.Middleware)
+
+	req := httptest.NewRequest(http.MethodPost, "http://backend/cms.v1.CMSService/GetSettings", nil)
+	req.Host = "backend"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-Host", "cms.example")
+	req.Header.Set("X-Forwarded-For", "203.0.113.10")
+	req.Header.Set("Origin", "https://evil.example")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected cross-origin API request to be rejected, got %d", rec.Code)
+	}
+	if rec.Header().Get("X-RateLimit-Limit") != "" {
+		t.Fatalf("expected same-origin guard to run before rate limiter, got %#v", rec.Header())
 	}
 }
 

@@ -46,7 +46,7 @@ func main() {
 	adminRateLimit := auth.NewRateLimiter(cfg.AdminRateLimit, time.Minute, cfg.TrustProxyHeaders)
 
 	mux := http.NewServeMux()
-	mux.Handle("/cms.v1.CMSService/", chain(api, ipf.Middleware, adminACL.Middleware, adminGeo.Middleware, adminRateLimit.Middleware, sameOrigin(cfg.TrustProxyHeaders), auth.Basic{User: cfg.AdminUser, Pass: cfg.AdminPass}.Middleware))
+	mux.Handle("/cms.v1.CMSService/", chain(api, ipf.Middleware, adminACL.Middleware, adminGeo.Middleware, sameOrigin(cfg.TrustProxyHeaders), adminRateLimit.Middleware, auth.Basic{User: cfg.AdminUser, Pass: cfg.AdminPass}.Middleware))
 	mux.Handle("/uploads/", chain(uploads, ipf.Middleware, publicACL.Middleware, publicGeo.Middleware, cacheUploads))
 	mux.Handle("/admin/", chain(http.StripPrefix("/admin/", admin), ipf.Middleware, adminACL.Middleware, adminGeo.Middleware, adminRateLimit.Middleware, auth.Basic{User: cfg.AdminUser, Pass: cfg.AdminPass}.Middleware))
 	mux.Handle("/", chain(pub, ipf.Middleware, publicACL.Middleware, publicGeo.Middleware))

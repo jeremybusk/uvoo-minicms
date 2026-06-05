@@ -23,6 +23,9 @@ func TestRateLimiterLimitsPerClientIP(t *testing.T) {
 		if rec.Code != http.StatusNoContent {
 			t.Fatalf("request %d: expected 204, got %d", i+1, rec.Code)
 		}
+		if rec.Header().Get("X-RateLimit-Limit") != "2" {
+			t.Fatalf("request %d: expected rate limit header, got %#v", i+1, rec.Header())
+		}
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/admin/", nil)
@@ -31,6 +34,9 @@ func TestRateLimiterLimitsPerClientIP(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("expected 429, got %d", rec.Code)
+	}
+	if rec.Header().Get("X-RateLimit-Remaining") != "0" || rec.Header().Get("Retry-After") == "" {
+		t.Fatalf("expected exhausted rate limit headers, got %#v", rec.Header())
 	}
 	if called != 2 {
 		t.Fatalf("expected downstream handler to be called twice, got %d", called)

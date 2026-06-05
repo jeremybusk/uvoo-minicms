@@ -291,6 +291,7 @@ The admin `Security` tab adds runtime rules without needing to restart:
 - Use TLS directly with `CMS_TLS_CERT`/`CMS_TLS_KEY`, or put it behind HTTPS. Basic Auth is only safe over HTTPS.
 - Set a strong `CMS_ADMIN_PASS`.
 - Set `CMS_ADMIN_RATE_LIMIT` to a reasonable per-minute value if the admin/API is internet-facing.
+- Rate-limited admin/API responses include `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `Retry-After` on `429`.
 - Use `CMS_CSP_MODE=report-only` while testing CSP compatibility on an existing site; use `off` only as a temporary workaround.
 - Keep `CMS_TRUST_PROXY_HEADERS=false` unless a trusted proxy strips and rewrites those headers.
 - Public uploads are limited to common image/text/document extensions.

@@ -33,7 +33,11 @@ func (l *RateLimiter) Middleware(next http.Handler) http.Handler {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !l.allow(r) {
+		allowed, remaining, reset := l.check(r)
+		w.Header().Set("X-RateLimit-Limit", strconv.Itoa(l.Limit))
+		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
+		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(reset.Unix(), 10))
+		if !allowed {
 			w.Header().Set("Retry-After", strconv.Itoa(int(l.Window.Seconds())))
 			http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 			return
@@ -42,7 +46,7 @@ func (l *RateLimiter) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-func (l *RateLimiter) allow(r *http.Request) bool {
+func (l *RateLimiter) check(r *http.Request) (bool, int, time.Time) {
 	ip := ClientIP(r, l.TrustProxy)
 	key := "unknown"
 	if ip != nil {
@@ -60,7 +64,11 @@ func (l *RateLimiter) allow(r *http.Request) bool {
 	if len(l.clients) > 4096 {
 		l.pruneLocked(now)
 	}
-	return bucket.Count <= l.Limit
+	remaining := l.Limit - bucket.Count
+	if remaining < 0 {
+		remaining = 0
+	}
+	return bucket.Count <= l.Limit, remaining, bucket.Reset
 }
 
 func (l *RateLimiter) pruneLocked(now time.Time) {
