@@ -77,6 +77,9 @@ func Load() Config {
 	cfg.DeniedCIDRs = split(denyCIDRs, false)
 	cfg.AllowedCountries = split(allowCountries, true)
 	cfg.DeniedCountries = split(denyCountries, true)
+	if cfg.AdminRateLimit < 0 {
+		cfg.AdminRateLimit = 0
+	}
 	return cfg
 }
 

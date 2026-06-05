@@ -54,3 +54,26 @@ func TestRateLimiterUsesTrustedProxyClientIP(t *testing.T) {
 		}
 	}
 }
+
+func TestRateLimiterDisabledForZeroOrNegativeLimit(t *testing.T) {
+	for _, limit := range []int{0, -1} {
+		limiter := NewRateLimiter(limit, time.Minute, false)
+		called := 0
+		handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			called++
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		for i := 0; i < 3; i++ {
+			req := httptest.NewRequest(http.MethodPost, "/admin/", nil)
+			req.RemoteAddr = "203.0.113.10:12345"
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusNoContent {
+				t.Fatalf("limit %d request %d: expected 204, got %d", limit, i+1, rec.Code)
+			}
+		}
+		if called != 3 {
+			t.Fatalf("limit %d: expected downstream handler to be called 3 times, got %d", limit, called)
+		}
+	}
+}
