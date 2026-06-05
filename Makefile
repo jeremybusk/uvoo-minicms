@@ -1,7 +1,7 @@
 .PHONY: dev build license-check package package-linux release run web docker-up docker-build docker-down
 
 web:
-	cd web && npm install && npm run build
+	cd web && npm ci && npm run build
 
 build:
 	bash scripts/build.sh
