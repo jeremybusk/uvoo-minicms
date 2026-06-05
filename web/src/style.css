@@ -347,7 +347,7 @@ body,
   margin-top: 16px;
 }
 
-.mdxLoading {
+.mdLoading {
   min-height: 540px;
   display: grid;
   place-items: center;
@@ -621,14 +621,11 @@ body,
   background: rgba(var(--admin-primary-rgb), .14) !important;
 }
 
-.mdxeditor-popup-container,
-.mdxeditor-popup-container *,
 [role="dialog"],
 [role="dialog"] * {
   color: var(--admin-text) !important;
 }
 
-.mdxeditor-popup-container,
 [role="dialog"] {
   --basePageBg: var(--admin-surface);
   --baseBase: var(--admin-surface-2);
@@ -647,9 +644,6 @@ body,
   border-color: var(--admin-border) !important;
 }
 
-.mdxeditor-popup-container input,
-.mdxeditor-popup-container textarea,
-.mdxeditor-popup-container select,
 [role="dialog"] input,
 [role="dialog"] textarea,
 [role="dialog"] select {
@@ -658,7 +652,6 @@ body,
   border-color: var(--admin-border) !important;
 }
 
-.mdxeditor-popup-container button,
 [role="dialog"] button {
   color: var(--admin-text) !important;
 }

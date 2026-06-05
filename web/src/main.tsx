@@ -5,7 +5,7 @@ import type { MenuProps, UploadProps } from 'antd'
 import './style.css'
 import { api, ACLRule, ACLSettings, Asset, ImportOptions, ImportResult, NavItem, Page, PageRevision, SiteSettings, ThemeHistory } from './api'
 
-const MdxBodyEditor = React.lazy(() => import('./MdxBodyEditor'))
+const MdBodyEditor = React.lazy(() => import('./MdBodyEditor'))
 const adminThemeStorageKey = 'uvoo-minicms-admin-theme'
 
 const palettes = {
@@ -569,7 +569,7 @@ function Root() {
     }
   }
 
-  const mdxEditorKey = [active?.slug || 'new', active?.updated_at || '', editorRev].join('-')
+  const mdEditorKey = [active?.slug || 'new', active?.updated_at || '', editorRev].join('-')
 
   return <ConfigProvider theme={cfg} getPopupContainer={trigger => trigger?.parentElement || document.body}><AntApp><Layout className={`layout themeStyle-${themeStyle}`} style={adminVars}>
     <Layout.Sider className="sider" width={310} breakpoint="lg" collapsedWidth={0}>
@@ -594,7 +594,7 @@ function Root() {
             <Space className="topbar" align="start">
               <Typography.Title level={3}>{active?.id ? 'Edit page' : 'New page'}</Typography.Title>
               <Space wrap>
-                <Switch checkedChildren="Markdown" unCheckedChildren="Editor" checked={sourceMode} onChange={setSourceMode} />
+                <Switch checkedChildren="Markdown" unCheckedChildren="WYSIWYG" checked={sourceMode} onChange={setSourceMode} />
                 {active?.slug && <Button onClick={() => loadRevisions(active.slug)} loading={loadingRevisions}>History</Button>}
                 {active?.slug && active.slug !== 'home' && <Popconfirm title="Delete page?" onConfirm={() => removePage(active.slug)}><Button danger>Delete</Button></Popconfirm>}
                 <Button href={active?.path || '/'} target="_blank">View</Button>
@@ -623,7 +623,7 @@ function Root() {
             <Form.Item name="markdown" label="Body" className="mdField">
               {sourceMode
                 ? <Input.TextArea rows={22} className="sourceEditor" value={md} onChange={e => form.setFieldValue('markdown', e.target.value)} />
-                : <React.Suspense fallback={<div className="mdxLoading">Loading editor...</div>}><MdxBodyEditor editorKey={mdxEditorKey} adminDark={adminDark} markdown={md} onChange={v => form.setFieldValue('markdown', v)} uploadImage={uploadImageForEditor} imageSuggestions={imageSuggestions} /></React.Suspense>}
+                : <React.Suspense fallback={<div className="mdLoading">Loading editor...</div>}><MdBodyEditor editorKey={mdEditorKey} adminDark={adminDark} markdown={md} onChange={v => form.setFieldValue('markdown', v)} uploadImage={uploadImageForEditor} imageSuggestions={imageSuggestions} /></React.Suspense>}
             </Form.Item>
           </Form>
           <Modal title="Browse uploads" open={mediaOpen} onCancel={() => setMediaOpen(false)} footer={null} width={920} className="mediaModal">

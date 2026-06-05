@@ -10,7 +10,7 @@ A deliberately small Hugo/WordPress-like CMS:
 - Page/post content types plus SEO descriptions for published routes.
 - Simple tags and public search across title, description, tags, and body.
 - Ant Design React admin UI.
-- MDXEditor WYSIWYG-style Markdown editor.
+- Milkdown WYSIWYG Markdown editor.
 - Optional source Markdown editing mode.
 - Links, images, tables, inline code, fenced code blocks, and Mermaid code fences.
 - Safe rich Markdown shortcodes for Font Awesome icons and cards.

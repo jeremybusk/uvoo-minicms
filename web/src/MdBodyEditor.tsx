@@ -23,7 +23,7 @@ import '@milkdown/crepe/theme/common/table.css'
 import '@milkdown/crepe/theme/common/toolbar.css'
 import '@milkdown/crepe/theme/frame.css'
 
-type MdxBodyEditorProps = {
+type MdBodyEditorProps = {
   adminDark: boolean
   editorKey: string
   imageSuggestions: string[]
@@ -32,7 +32,7 @@ type MdxBodyEditorProps = {
   uploadImage: (file: File) => Promise<string>
 }
 
-export default function MdxBodyEditor({ adminDark, editorKey, imageSuggestions, markdown, onChange, uploadImage }: MdxBodyEditorProps) {
+export default function MdBodyEditor({ adminDark, editorKey, imageSuggestions, markdown, onChange, uploadImage }: MdBodyEditorProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const editorRef = useRef<CrepeBuilder | null>(null)
   const onChangeRef = useRef(onChange)
