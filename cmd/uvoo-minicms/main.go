@@ -37,6 +37,7 @@ func main() {
 	admin := http.FileServer(http.Dir(cfg.WebRoot))
 	uploads := http.StripPrefix("/uploads/", http.FileServer(http.Dir(cfg.UploadDir)))
 	pub := web.NewPublic(store, cfg.PublicSiteName)
+	pub.TrustProxy = cfg.TrustProxyHeaders
 	adminACL := acl.Filter{Store: store, Scope: "admin", TrustProxy: cfg.TrustProxyHeaders}
 	publicACL := acl.Filter{Store: store, Scope: "public", TrustProxy: cfg.TrustProxyHeaders}
 	adminGeo := geof.WithStore(store, "admin")

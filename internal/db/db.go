@@ -8,12 +8,23 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
-type Store struct{ DB *sql.DB }
+type Store struct {
+	DB *sql.DB
+
+	cacheMu          sync.RWMutex
+	settingsCached   bool
+	settingsFallback string
+	settingsCache    Settings
+	aclCached        bool
+	aclSettings      SecuritySettings
+	aclRules         []ACLRule
+}
 
 type Page struct {
 	ID              int64  `json:"id"`
@@ -456,6 +467,15 @@ func (s *Store) DeleteAsset(ctx context.Context, id int64) error {
 }
 
 func (s *Store) GetACL(ctx context.Context) (SecuritySettings, []ACLRule, error) {
+	s.cacheMu.RLock()
+	if s.aclCached {
+		settings := s.aclSettings
+		rules := cloneACLRules(s.aclRules)
+		s.cacheMu.RUnlock()
+		return settings, rules, nil
+	}
+	s.cacheMu.RUnlock()
+
 	settings := SecuritySettings{AdminDefault: "allow", PublicDefault: "allow"}
 	err := s.DB.QueryRowContext(ctx, `SELECT admin_default,public_default,admin_allow_countries,admin_deny_countries,public_allow_countries,public_deny_countries FROM acl_settings WHERE id=1`).Scan(&settings.AdminDefault, &settings.PublicDefault, &settings.AdminAllowCountries, &settings.AdminDenyCountries, &settings.PublicAllowCountries, &settings.PublicDenyCountries)
 	if err != nil {
@@ -476,7 +496,16 @@ func (s *Store) GetACL(ctx context.Context) (SecuritySettings, []ACLRule, error)
 		rule.Enabled = enabled == 1
 		rules = append(rules, rule)
 	}
-	return normalizeSecurity(settings), rules, rows.Err()
+	if err := rows.Err(); err != nil {
+		return SecuritySettings{}, nil, err
+	}
+	settings = normalizeSecurity(settings)
+	s.cacheMu.Lock()
+	s.aclCached = true
+	s.aclSettings = settings
+	s.aclRules = cloneACLRules(rules)
+	s.cacheMu.Unlock()
+	return settings, rules, nil
 }
 
 func (s *Store) SaveACL(ctx context.Context, settings SecuritySettings, rules []ACLRule) (SecuritySettings, []ACLRule, error) {
@@ -507,14 +536,30 @@ func (s *Store) SaveACL(ctx context.Context, settings SecuritySettings, rules []
 	if err := tx.Commit(); err != nil {
 		return SecuritySettings{}, nil, err
 	}
+	s.cacheMu.Lock()
+	s.aclCached = false
+	s.cacheMu.Unlock()
 	return s.GetACL(ctx)
 }
 
 func (s *Store) GetSettings(ctx context.Context, fallbackSiteName string) (Settings, error) {
+	s.cacheMu.RLock()
+	if s.settingsCached && (s.settingsFallback == "" || s.settingsFallback == fallbackSiteName) {
+		settings := cloneSettings(s.settingsCache)
+		s.cacheMu.RUnlock()
+		return settings, nil
+	}
+	s.cacheMu.RUnlock()
+
 	settings := DefaultSettings(fallbackSiteName)
 	var raw string
 	err := s.DB.QueryRowContext(ctx, `SELECT value FROM settings WHERE key='site'`).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
+		s.cacheMu.Lock()
+		s.settingsCached = true
+		s.settingsFallback = fallbackSiteName
+		s.settingsCache = cloneSettings(settings)
+		s.cacheMu.Unlock()
 		return settings, nil
 	}
 	if err != nil {
@@ -573,6 +618,11 @@ func (s *Store) GetSettings(ctx context.Context, fallbackSiteName string) (Setti
 		settings.NavLayout = "top"
 	}
 	normalizeSettings(&settings)
+	s.cacheMu.Lock()
+	s.settingsCached = true
+	s.settingsFallback = fallbackSiteName
+	s.settingsCache = cloneSettings(settings)
+	s.cacheMu.Unlock()
 	return settings, nil
 }
 
@@ -616,6 +666,12 @@ ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated
 	if err := s.SaveThemeHistory(ctx, settings); err != nil {
 		return Settings{}, err
 	}
+	settings = cloneSettings(settings)
+	s.cacheMu.Lock()
+	s.settingsCached = true
+	s.settingsFallback = ""
+	s.settingsCache = cloneSettings(settings)
+	s.cacheMu.Unlock()
 	return settings, nil
 }
 
@@ -788,6 +844,20 @@ func normalizeCountries(raw string) string {
 		}
 	}
 	return strings.Join(out, ",")
+}
+
+func cloneSettings(settings Settings) Settings {
+	if settings.Menu != nil {
+		settings.Menu = append([]NavItem(nil), settings.Menu...)
+	}
+	return settings
+}
+
+func cloneACLRules(rules []ACLRule) []ACLRule {
+	if rules == nil {
+		return nil
+	}
+	return append([]ACLRule(nil), rules...)
 }
 
 func boolInt(b bool) int {

@@ -302,3 +302,17 @@ func TestPublicBlogFeedListsPublishedPosts(t *testing.T) {
 		t.Fatalf("draft should not render in feed, got %s", xml)
 	}
 }
+
+func TestPublicBaseURLOnlyTrustsForwardedHeadersWhenEnabled(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "http://internal.test/blog/feed.xml", nil)
+	req.Host = "internal.test"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-Host", "public.example")
+
+	if got := publicBaseURL(req, false); got != "http://internal.test" {
+		t.Fatalf("expected untrusted forwarded headers to be ignored, got %q", got)
+	}
+	if got := publicBaseURL(req, true); got != "https://public.example" {
+		t.Fatalf("expected trusted forwarded headers to be used, got %q", got)
+	}
+}

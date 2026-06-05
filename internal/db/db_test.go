@@ -68,3 +68,64 @@ func TestListPublishedPostsOrdersByPublishedAt(t *testing.T) {
 		t.Fatalf("unexpected post order: %#v", posts)
 	}
 }
+
+func TestGetSettingsCacheReturnsCopies(t *testing.T) {
+	store, err := Open(t.TempDir() + "/cms.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.DB.Close()
+	ctx := context.Background()
+
+	settings, err := store.GetSettings(ctx, "Demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.Menu[0].Label = "Mutated"
+
+	again, err := store.GetSettings(ctx, "Demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Menu[0].Label != "Home" {
+		t.Fatalf("cached settings menu was mutated: %#v", again.Menu)
+	}
+}
+
+func TestGetACLCacheReturnsCopiesAndInvalidatesOnSave(t *testing.T) {
+	store, err := Open(t.TempDir() + "/cms.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.DB.Close()
+	ctx := context.Background()
+
+	_, rules, err := store.SaveACL(ctx, SecuritySettings{AdminDefault: "allow", PublicDefault: "allow"}, []ACLRule{
+		{Scope: "admin", Action: "deny", CIDR: "203.0.113.0/24", Enabled: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("expected one rule, got %#v", rules)
+	}
+	rules[0].CIDR = "198.51.100.0/24"
+
+	_, again, err := store.GetACL(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again[0].CIDR != "203.0.113.0/24" {
+		t.Fatalf("cached ACL rule was mutated: %#v", again)
+	}
+
+	_, updated, err := store.SaveACL(ctx, SecuritySettings{AdminDefault: "allow", PublicDefault: "allow"}, []ACLRule{
+		{Scope: "admin", Action: "deny", CIDR: "198.51.100.0/24", Enabled: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated) != 1 || updated[0].CIDR != "198.51.100.0/24" {
+		t.Fatalf("expected cache to refresh after save, got %#v", updated)
+	}
+}
