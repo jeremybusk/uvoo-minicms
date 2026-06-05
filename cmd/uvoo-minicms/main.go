@@ -43,11 +43,12 @@ func main() {
 	publicACL := acl.Filter{Store: store, Scope: "public", TrustProxy: cfg.TrustProxyHeaders}
 	adminGeo := geof.WithStore(store, "admin")
 	publicGeo := geof.WithStore(store, "public")
+	adminRateLimit := auth.NewRateLimiter(cfg.AdminRateLimit, time.Minute, cfg.TrustProxyHeaders)
 
 	mux := http.NewServeMux()
-	mux.Handle("/cms.v1.CMSService/", chain(api, ipf.Middleware, adminACL.Middleware, adminGeo.Middleware, sameOrigin(cfg.TrustProxyHeaders), auth.Basic{User: cfg.AdminUser, Pass: cfg.AdminPass}.Middleware))
+	mux.Handle("/cms.v1.CMSService/", chain(api, ipf.Middleware, adminACL.Middleware, adminGeo.Middleware, adminRateLimit.Middleware, sameOrigin(cfg.TrustProxyHeaders), auth.Basic{User: cfg.AdminUser, Pass: cfg.AdminPass}.Middleware))
 	mux.Handle("/uploads/", chain(uploads, ipf.Middleware, publicACL.Middleware, publicGeo.Middleware, cacheUploads))
-	mux.Handle("/admin/", chain(http.StripPrefix("/admin/", admin), ipf.Middleware, adminACL.Middleware, adminGeo.Middleware, auth.Basic{User: cfg.AdminUser, Pass: cfg.AdminPass}.Middleware))
+	mux.Handle("/admin/", chain(http.StripPrefix("/admin/", admin), ipf.Middleware, adminACL.Middleware, adminGeo.Middleware, adminRateLimit.Middleware, auth.Basic{User: cfg.AdminUser, Pass: cfg.AdminPass}.Middleware))
 	mux.Handle("/", chain(pub, ipf.Middleware, publicACL.Middleware, publicGeo.Middleware))
 
 	tlsEnabled := cfg.TLSCertFile != "" && cfg.TLSKeyFile != ""
@@ -75,8 +76,26 @@ func secureHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "same-origin")
 		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", contentSecurityPolicy())
 		next.ServeHTTP(w, r)
 	})
+}
+
+func contentSecurityPolicy() string {
+	return strings.Join([]string{
+		"default-src 'self'",
+		"base-uri 'self'",
+		"object-src 'none'",
+		"frame-ancestors 'none'",
+		"form-action 'self'",
+		"connect-src 'self'",
+		"img-src 'self' data: blob: http: https:",
+		"media-src 'self' data: blob: http: https:",
+		"font-src 'self' data: https://cdnjs.cloudflare.com",
+		"style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com",
+		"script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+		"frame-src https://www.youtube-nocookie.com https://player.vimeo.com",
+	}, "; ")
 }
 
 func cacheUploads(next http.Handler) http.Handler {

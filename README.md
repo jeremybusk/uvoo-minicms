@@ -243,6 +243,7 @@ Icon names map to Font Awesome solid classes, so `{{icon:rocket}}` becomes `fa-s
 | `CMS_SITE_NAME` | `Uvoo-MiniCMS` | Public site name. |
 | `CMS_ADMIN_USER` | `admin` | Basic Auth username. |
 | `CMS_ADMIN_PASS` | `change-me` | Basic Auth password. Change this; default/empty passwords are refused on non-loopback bind addresses. |
+| `CMS_ADMIN_RATE_LIMIT` | `0` | Admin/API requests per minute per client IP. `0` disables rate limiting. |
 | `CMS_DATA_DIR` | `./data` | Data root. |
 | `CMS_DB` | `./data/cms.db` | SQLite DB path. |
 | `CMS_UPLOAD_DIR` | `./data/uploads` | Upload directory. |
@@ -288,6 +289,7 @@ The admin `Security` tab adds runtime rules without needing to restart:
 
 - Use TLS directly with `CMS_TLS_CERT`/`CMS_TLS_KEY`, or put it behind HTTPS. Basic Auth is only safe over HTTPS.
 - Set a strong `CMS_ADMIN_PASS`.
+- Set `CMS_ADMIN_RATE_LIMIT` to a reasonable per-minute value if the admin/API is internet-facing.
 - Keep `CMS_TRUST_PROXY_HEADERS=false` unless a trusted proxy strips and rewrites those headers.
 - Public uploads are limited to common image/text/document extensions.
 - Raw HTML in Markdown is escaped by default; use Markdown syntax for page content.

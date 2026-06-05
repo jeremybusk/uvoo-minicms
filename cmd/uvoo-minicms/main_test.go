@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"uvoo-minicms/internal/config"
@@ -58,5 +59,58 @@ func TestSameOriginUsesForwardedHeadersOnlyWhenTrusted(t *testing.T) {
 	}
 	if !sameOriginRequest(req, true) {
 		t.Fatal("expected trusted forwarded origin to be allowed")
+	}
+}
+
+func TestSameOriginMiddlewareBehindTrustedProxy(t *testing.T) {
+	handler := sameOrigin(true)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodPost, "http://backend/cms.v1.CMSService/GetSettings", nil)
+	req.Host = "backend"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-Host", "cms.example")
+	req.Header.Set("Origin", "https://cms.example")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected trusted proxy same-origin request to pass, got %d", rec.Code)
+	}
+}
+
+func TestSameOriginMiddlewareRejectsUntrustedForwardedOrigin(t *testing.T) {
+	handler := sameOrigin(false)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodPost, "http://backend/cms.v1.CMSService/GetSettings", nil)
+	req.Host = "backend"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-Host", "cms.example")
+	req.Header.Set("Origin", "https://cms.example")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected untrusted forwarded origin to be rejected, got %d", rec.Code)
+	}
+}
+
+func TestSecureHeadersAddsConservativeCSP(t *testing.T) {
+	handler := secureHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	csp := rec.Header().Get("Content-Security-Policy")
+	for _, want := range []string{
+		"default-src 'self'",
+		"object-src 'none'",
+		"frame-ancestors 'none'",
+		"https://cdn.jsdelivr.net",
+		"https://www.youtube-nocookie.com",
+	} {
+		if !strings.Contains(csp, want) {
+			t.Fatalf("expected CSP to contain %q, got %q", want, csp)
+		}
 	}
 }

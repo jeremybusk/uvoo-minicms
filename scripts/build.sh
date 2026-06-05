@@ -21,11 +21,11 @@ if ! command -v gcc >/dev/null 2>&1 && ! command -v cc >/dev/null 2>&1; then
 fi
 
 cd "$ROOT/web"
-if [ -f package-lock.json ]; then
-  npm ci
-else
-  npm install
+if [ ! -f package-lock.json ]; then
+  echo "missing web/package-lock.json: run npm install in web/ and commit the lockfile before building" >&2
+  exit 1
 fi
+npm ci
 npm run build
 
 cd "$ROOT"
