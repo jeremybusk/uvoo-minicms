@@ -423,7 +423,14 @@ body,
 .milkdownMarkdownEditor .milkdown .ProseMirror {
   min-height: 500px;
   padding: 28px 32px;
+  caret-color: var(--admin-primary);
   outline: none;
+}
+
+.milkdownMarkdownEditor .milkdown .ProseMirror ::selection,
+.milkdownMarkdownEditor .milkdown .cm-content ::selection {
+  color: var(--admin-text);
+  background: rgba(var(--admin-primary-rgb), .28);
 }
 
 .milkdownMarkdownEditor .milkdown .milkdown-top-bar {
@@ -463,6 +470,7 @@ body,
   background: var(--admin-surface-2);
   border: 1px solid var(--admin-border);
   border-radius: var(--admin-control-radius);
+  caret-color: var(--admin-primary);
 }
 
 .milkdownMarkdownEditor .milkdown pre code {
@@ -470,6 +478,64 @@ body,
   background: transparent;
   border: 0;
   padding: 0;
+  caret-color: var(--admin-primary);
+}
+
+.milkdownMarkdownEditor .milkdown .milkdown-code-block,
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .cm-editor,
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .cm-gutters,
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .milkdown-code-block-placeholder {
+  color: var(--admin-text);
+  background: var(--admin-surface-2);
+  caret-color: var(--admin-primary);
+}
+
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .cm-content,
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .cm-line,
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .cm-activeLine,
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .cm-activeLineGutter {
+  color: var(--admin-text);
+  background: transparent;
+  caret-color: var(--admin-primary);
+}
+
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .cm-cursor,
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .cm-dropCursor {
+  border-left-color: var(--admin-primary) !important;
+}
+
+.milkdownMarkdownEditor .milkdown .milkdown-code-block .cm-selectionBackground,
+.milkdownMarkdownEditor .milkdown .milkdown-code-block.cm-focused .cm-selectionBackground {
+  background: rgba(var(--admin-primary-rgb), .28) !important;
+}
+
+.milkdownMarkdownEditor .milkdown .milkdown-toolbar,
+.milkdownMarkdownEditor .milkdown .milkdown-slash-menu,
+.milkdownMarkdownEditor .milkdown .milkdown-top-bar .top-bar-heading-dropdown,
+.milkdownMarkdownEditor .milkdown .milkdown-link-preview > .link-preview,
+.milkdownMarkdownEditor .milkdown .milkdown-link-edit > .link-edit {
+  color: var(--admin-text);
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  box-shadow: 0 12px 32px var(--admin-shadow);
+}
+
+.milkdownMarkdownEditor .milkdown .milkdown-link-preview > .link-preview > .link-display,
+.milkdownMarkdownEditor .milkdown .milkdown-link-edit > .link-edit > .input-area,
+.milkdownMarkdownEditor .milkdown .milkdown-slash-menu .menu-groups .menu-group li > span,
+.milkdownMarkdownEditor .milkdown .milkdown-top-bar .top-bar-heading-option {
+  color: var(--admin-text);
+  caret-color: var(--admin-primary);
+}
+
+.milkdownMarkdownEditor .milkdown .milkdown-toolbar .toolbar-item svg,
+.milkdownMarkdownEditor .milkdown .milkdown-link-preview svg,
+.milkdownMarkdownEditor .milkdown .milkdown-link-edit svg,
+.milkdownMarkdownEditor .milkdown .milkdown-block-handle svg,
+.milkdownMarkdownEditor .milkdown .milkdown-slash-menu svg {
+  color: var(--admin-muted);
+  fill: var(--admin-muted);
+  stroke: var(--admin-muted);
 }
 
 .milkdownMarkdownEditor .milkdown input,
@@ -477,6 +543,7 @@ body,
   color: var(--admin-text);
   background: var(--admin-surface-2);
   border-color: var(--admin-border);
+  caret-color: var(--admin-primary);
 }
 
 .sourceEditor,
