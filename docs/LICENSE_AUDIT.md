@@ -44,6 +44,11 @@ The admin Markdown editor now uses TOAST UI Editor. `make license-check`
 should remain free of `@codesandbox/nodebox`, Sandpack, and other
 Sustainable Use License packages.
 
+Syntax highlighting uses the TOAST UI code syntax plugin and PrismJS in the
+admin editor, plus goldmark-highlighting and Chroma in the public renderer.
+These dependencies are currently permissively licensed and should remain covered
+by the normal license check before release.
+
 Before adding copied third-party files, generated assets, examples, or templates,
 record their source and license. Do not add GPL, AGPL, LGPL, proprietary, or
 unknown-license code unless the licensing implications have been reviewed.

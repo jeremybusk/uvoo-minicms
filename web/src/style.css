@@ -443,10 +443,31 @@ body,
   color: var(--admin-text);
 }
 
-.toastMarkdownEditor .toastui-editor-contents pre,
-.toastMarkdownEditor .toastui-editor-contents code,
 .toastMarkdownEditor .toastui-editor-md-container .toastui-editor textarea {
   background: var(--admin-surface-2);
+}
+
+.toastMarkdownEditor .toastui-editor-contents :not(pre) > code {
+  color: var(--admin-primary);
+  background: rgba(var(--admin-primary-rgb), .12);
+  border: 1px solid rgba(var(--admin-primary-rgb), .22);
+  border-radius: 4px;
+  padding: 2px 5px;
+  font-size: .92em;
+}
+
+.toastMarkdownEditor .toastui-editor-contents pre {
+  color: var(--admin-text);
+  background: var(--admin-surface-2);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-control-radius);
+}
+
+.toastMarkdownEditor .toastui-editor-contents pre code {
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
 }
 
 .toastMarkdownEditor .toastui-editor-popup,

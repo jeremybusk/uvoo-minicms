@@ -1,8 +1,22 @@
 import { useEffect, useRef } from 'react'
 import { Select } from 'antd'
 import Editor from '@toast-ui/editor'
+import Prism from 'prismjs'
+import codeSyntaxHighlight from '@toast-ui/editor-plugin-code-syntax-highlight'
 import '@toast-ui/editor/dist/toastui-editor.css'
 import '@toast-ui/editor/dist/theme/toastui-editor-dark.css'
+import 'prismjs/themes/prism-tomorrow.css'
+import '@toast-ui/editor-plugin-code-syntax-highlight/dist/toastui-editor-plugin-code-syntax-highlight.css'
+import 'prismjs/components/prism-bash.js'
+import 'prismjs/components/prism-css.js'
+import 'prismjs/components/prism-go.js'
+import 'prismjs/components/prism-javascript.js'
+import 'prismjs/components/prism-json.js'
+import 'prismjs/components/prism-markdown.js'
+import 'prismjs/components/prism-python.js'
+import 'prismjs/components/prism-sql.js'
+import 'prismjs/components/prism-typescript.js'
+import 'prismjs/components/prism-yaml.js'
 
 type MdxBodyEditorProps = {
   adminDark: boolean
@@ -39,6 +53,7 @@ export default function MdxBodyEditor({ adminDark, editorKey, imageSuggestions, 
       autofocus: false,
       usageStatistics: false,
       theme: adminDark ? 'dark' : undefined,
+      plugins: [[codeSyntaxHighlight, { highlighter: Prism }]],
       events: {
         change: () => {
           onChangeRef.current(editor.getMarkdown())
