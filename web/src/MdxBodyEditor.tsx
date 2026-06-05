@@ -27,6 +27,12 @@ type MdxBodyEditorProps = {
   uploadImage: (file: File) => Promise<string>
 }
 
+type ToastEditorWithEvents = Editor & {
+  eventEmitter?: {
+    emit: (name: string, payload?: unknown) => void
+  }
+}
+
 export default function MdxBodyEditor({ adminDark, editorKey, imageSuggestions, markdown, onChange, uploadImage }: MdxBodyEditorProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const editorRef = useRef<Editor | null>(null)
@@ -51,6 +57,7 @@ export default function MdxBodyEditor({ adminDark, editorKey, imageSuggestions, 
       // The vertical split preview can call posAtCoords during hidden/resizing
       // states and crash in the bundled editor. WYSIWYG mode does not need it.
       previewStyle: 'tab',
+      hideModeSwitch: true,
       minHeight: '540px',
       autofocus: false,
       usageStatistics: false,
@@ -70,6 +77,8 @@ export default function MdxBodyEditor({ adminDark, editorKey, imageSuggestions, 
       }
     })
 
+    const editorWithEvents = editor as ToastEditorWithEvents
+    editorWithEvents.eventEmitter?.emit('toggleScrollSync', false)
     editorRef.current = editor
     return () => {
       editor.destroy()
