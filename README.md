@@ -155,6 +155,42 @@ See [docs/LICENSE_AUDIT.md](docs/LICENSE_AUDIT.md) for scanner setup and the dep
 
 ## Docker
 
+For a normal Docker install, pull the image from GHCR and persist `/data`:
+
+```bash
+cp .env.example .env
+# edit CMS_ADMIN_PASS before starting
+docker run -d --name uvoo-minicms \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  --env-file .env \
+  -e CMS_DATA_DIR=/data \
+  -e CMS_DB=/data/cms.db \
+  -e CMS_UPLOAD_DIR=/data/uploads \
+  -e CMS_WEB_ROOT=/app/web/dist \
+  -v "$PWD/data:/data" \
+  ghcr.io/jeremybusk/uvoo-minicms:latest
+```
+
+Replace `latest` with a branch, release, or short-SHA tag from GHCR for repeatable deployments.
+
+To run the published image with Compose:
+
+```bash
+cp .env.example .env
+# edit CMS_ADMIN_PASS before starting
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+You can pin a different image tag without editing the file:
+
+```bash
+CMS_IMAGE=ghcr.io/jeremybusk/uvoo-minicms:sha-abc1234 \
+  docker compose -f docker-compose.ghcr.yml up -d
+```
+
+For local development or testing a local Dockerfile build:
+
 ```bash
 cp .env.example .env
 # edit CMS_ADMIN_PASS before starting
@@ -162,6 +198,7 @@ docker compose up --build
 ```
 
 The Docker build uses the committed `web/package-lock.json` with `npm ci` for repeatable frontend installs.
+The Compose files override the local `.env.example` data paths so container state is stored under `/data`.
 
 Use modern Compose (`docker compose`, with a space). The old Python `docker-compose` v1.29.x can fail during container recreation with `KeyError: 'ContainerConfig'` on newer Docker engines. If you hit that, run:
 
@@ -174,11 +211,11 @@ The Makefile also includes `make docker-up`, `make docker-build`, and `make dock
 ## Helm / Kubernetes
 
 A Helm chart is available in `charts/uvoo-minicms`. It deploys the app with a `PersistentVolumeClaim`, `ClusterIP` Service, generated admin credentials, and an HTTPS Ingress using the `nginx` ingress class by default.
+The chart defaults to `ghcr.io/jeremybusk/uvoo-minicms:latest` with `image.pullPolicy=Always`; set `image.tag` to a release, branch, or short-SHA tag for repeatable deployments.
 
 ```bash
 helm upgrade --install cms ./charts/uvoo-minicms \
-  --set image.repository=ghcr.io/OWNER/uvoo-minicms \
-  --set image.tag=VERSION \
+  --set image.tag=latest \
   --set ingress.host=cms.example.com
 ```
 

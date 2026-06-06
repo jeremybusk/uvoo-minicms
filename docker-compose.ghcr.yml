@@ -1,7 +1,6 @@
 services:
   uvoo-minicms:
-    image: ${CMS_IMAGE:-uvoo-minicms:local}
-    build: .
+    image: ${CMS_IMAGE:-ghcr.io/jeremybusk/uvoo-minicms:latest}
     ports:
       - "8080:8080"
     env_file: .env
@@ -12,6 +11,5 @@ services:
       CMS_WEB_ROOT: /app/web/dist
     volumes:
       - ./data:/data
-      # - ${PWD}/data:/data
       # Optional MaxMind DB:
       # - ./GeoLite2-Country.mmdb:/app/GeoLite2-Country.mmdb:ro

@@ -6,10 +6,11 @@ This chart runs Uvoo-MiniCMS behind a Kubernetes Service and optional HTTPS Ingr
 
 ```bash
 helm install cms ./charts/uvoo-minicms \
-  --set image.repository=ghcr.io/OWNER/uvoo-minicms \
-  --set image.tag=VERSION \
+  --set image.tag=latest \
   --set ingress.host=cms.example.com
 ```
+
+The chart defaults to `ghcr.io/jeremybusk/uvoo-minicms:latest` with `image.pullPolicy=Always`. For repeatable deployments, set `image.tag` to a release, branch, or short-SHA tag published by the GHCR workflow. Override `image.repository` only if you mirror or fork the image.
 
 The chart generates and preserves an admin password unless `admin.password` or `admin.existingSecret` is set.
 
