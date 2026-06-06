@@ -172,6 +172,16 @@ docker run -d --name uvoo-minicms \
   ghcr.io/jeremybusk/uvoo-minicms:latest
 ```
 
+The `.env` file is optional. You can pass the required password directly instead:
+
+```bash
+docker run --rm -p 8080:8080 \
+  -e CMS_ADMIN_PASS='use-a-long-random-password' \
+  ghcr.io/jeremybusk/uvoo-minicms:latest
+```
+
+Docker options must come before the image name. In `docker run ghcr.io/jeremybusk/uvoo-minicms -e CMS_ADMIN_PASS=foo`, the `-e` is passed to Uvoo-MiniCMS instead of Docker, so the app reports `flag provided but not defined: -e`.
+
 Replace `latest` with a branch, release, or short-SHA tag from GHCR for repeatable deployments.
 
 To run the published image with Compose:
