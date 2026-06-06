@@ -1,0 +1,34 @@
+Uvoo-MiniCMS has been installed.
+
+Public URL:
+{{- if .Values.ingress.enabled }}
+  https://{{ .Values.ingress.host }}/
+{{- else }}
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "uvoo-minicms.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  kubectl --namespace {{ .Release.Namespace }} port-forward "$POD_NAME" 8080:8080
+  http://127.0.0.1:8080/
+{{- end }}
+
+Admin URL:
+{{- if .Values.ingress.enabled }}
+  https://{{ .Values.ingress.host }}/admin/
+{{- else }}
+  http://127.0.0.1:8080/admin/
+{{- end }}
+
+Admin username secret:
+  kubectl get secret --namespace {{ .Release.Namespace }} {{ include "uvoo-minicms.adminSecretName" . }} -o jsonpath="{.data.{{ .Values.admin.usernameKey }}}" | base64 -d
+
+Admin password secret:
+  kubectl get secret --namespace {{ .Release.Namespace }} {{ include "uvoo-minicms.adminSecretName" . }} -o jsonpath="{.data.{{ .Values.admin.passwordKey }}}" | base64 -d
+
+TLS:
+{{- if and .Values.ingress.enabled .Values.ingress.tls.enabled .Values.ingress.certManager.enabled }}
+  cert-manager will request/manage secret {{ include "uvoo-minicms.tlsSecretName" . }}.
+{{- else if and .Values.ingress.enabled .Values.ingress.tls.enabled .Values.ingress.tls.crt .Values.ingress.tls.key }}
+  The chart created TLS secret {{ include "uvoo-minicms.tlsSecretName" . }} from provided PEM values.
+{{- else if and .Values.ingress.enabled .Values.ingress.tls.enabled }}
+  Ingress references TLS secret {{ include "uvoo-minicms.tlsSecretName" . }}. Create it yourself or enable ingress.certManager.enabled.
+{{- else }}
+  Ingress TLS is disabled.
+{{- end }}

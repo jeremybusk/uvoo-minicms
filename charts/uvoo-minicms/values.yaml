@@ -1,0 +1,113 @@
+replicaCount: 1
+
+deploymentStrategy:
+  type: Recreate
+
+image:
+  repository: ghcr.io/jeremybusk/uvoo-minicms
+  pullPolicy: Always
+  tag: latest
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+  runAsGroup: 10001
+  runAsNonRoot: true
+  runAsUser: 10001
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+admin:
+  username: admin
+  password: ""
+  existingSecret: ""
+  usernameKey: admin-user
+  passwordKey: admin-password
+
+config:
+  siteName: Uvoo-MiniCMS
+  adminRateLimit: "60"
+  maxUploadBytes: "26214400"
+  cspMode: enforce
+  hsts:
+    enabled: true
+    maxAge: "15552000"
+  trustProxyHeaders: ""
+  allowedCIDRs: ""
+  deniedCIDRs: ""
+  maxMindDBPath: ""
+  allowedCountries: ""
+  deniedCountries: ""
+  extraEnv: []
+
+persistence:
+  enabled: true
+  accessModes:
+    - ReadWriteOnce
+  size: 5Gi
+  storageClass: ""
+  existingClaim: ""
+  annotations: {}
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  host: cms.example.com
+  path: /
+  pathType: Prefix
+  tls:
+    enabled: true
+    secretName: ""
+    crt: ""
+    key: ""
+  certManager:
+    enabled: false
+    clusterIssuer: letsencrypt-prod
+    issuer: ""
+    commonName: ""
+    duration: ""
+    renewBefore: ""
+
+resources: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+probes:
+  liveness:
+    enabled: true
+    initialDelaySeconds: 20
+    periodSeconds: 20
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
