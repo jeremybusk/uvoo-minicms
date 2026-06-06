@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "uvoo-minicms.fullname" . }}
+  labels:
+    {{- include "uvoo-minicms.labels" . | nindent 4 }}
+data:
+  CMS_ADDR: ":8080"
+  CMS_SITE_NAME: {{ .Values.config.siteName | quote }}
+  CMS_ADMIN_RATE_LIMIT: {{ .Values.config.adminRateLimit | quote }}
+  CMS_DATA_DIR: "/data"
+  CMS_DB: "/data/cms.db"
+  CMS_UPLOAD_DIR: "/data/uploads"
+  CMS_WEB_ROOT: "/app/web/dist"
+  CMS_MAX_UPLOAD_BYTES: {{ .Values.config.maxUploadBytes | quote }}
+  CMS_CSP_MODE: {{ .Values.config.cspMode | quote }}
+  CMS_HSTS_ENABLED: {{ .Values.config.hsts.enabled | quote }}
+  CMS_HSTS_MAX_AGE: {{ .Values.config.hsts.maxAge | quote }}
+  CMS_TRUST_PROXY_HEADERS: {{ include "uvoo-minicms.trustProxyHeaders" . | quote }}
+  CMS_ALLOW_CIDRS: {{ .Values.config.allowedCIDRs | quote }}
+  CMS_DENY_CIDRS: {{ .Values.config.deniedCIDRs | quote }}
+  CMS_MAXMIND_DB: {{ .Values.config.maxMindDBPath | quote }}
+  CMS_ALLOW_COUNTRIES: {{ .Values.config.allowedCountries | quote }}
+  CMS_DENY_COUNTRIES: {{ .Values.config.deniedCountries | quote }}

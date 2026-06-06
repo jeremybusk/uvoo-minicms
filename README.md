@@ -171,6 +171,28 @@ docker compose up -d --force-recreate --remove-orphans uvoo-minicms
 
 The Makefile also includes `make docker-up`, `make docker-build`, and `make docker-down` wrappers that use modern Compose.
 
+## Helm / Kubernetes
+
+A Helm chart is available in `charts/uvoo-minicms`. It deploys the app with a `PersistentVolumeClaim`, `ClusterIP` Service, generated admin credentials, and an HTTPS Ingress using the `nginx` ingress class by default.
+
+```bash
+helm upgrade --install cms ./charts/uvoo-minicms \
+  --set image.repository=ghcr.io/OWNER/uvoo-minicms \
+  --set image.tag=VERSION \
+  --set ingress.host=cms.example.com
+```
+
+For cert-manager ACME, set `ingress.certManager.enabled=true` and the issuer:
+
+```bash
+helm upgrade --install cms ./charts/uvoo-minicms \
+  --set ingress.host=cms.example.com \
+  --set ingress.certManager.enabled=true \
+  --set ingress.certManager.clusterIssuer=letsencrypt-prod
+```
+
+For a custom certificate, either set `ingress.tls.secretName` to an existing `kubernetes.io/tls` Secret or provide PEM values through the chart. See `charts/uvoo-minicms/README.md` for examples.
+
 ## Content Model
 
 Uvoo-MiniCMS keeps the editing model intentionally small:

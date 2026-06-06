@@ -1,0 +1,53 @@
+{{- if .Values.ingress.enabled }}
+{{- if not .Values.ingress.host }}
+{{- fail "ingress.host is required when ingress.enabled=true" }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "uvoo-minicms.fullname" . }}
+  labels:
+    {{- include "uvoo-minicms.labels" . | nindent 4 }}
+  {{- if or .Values.ingress.annotations .Values.ingress.certManager.enabled }}
+  annotations:
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- if .Values.ingress.certManager.enabled }}
+    {{- if .Values.ingress.certManager.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.certManager.clusterIssuer | quote }}
+    {{- end }}
+    {{- if .Values.ingress.certManager.issuer }}
+    cert-manager.io/issuer: {{ .Values.ingress.certManager.issuer | quote }}
+    {{- end }}
+    {{- if .Values.ingress.certManager.commonName }}
+    cert-manager.io/common-name: {{ .Values.ingress.certManager.commonName | quote }}
+    {{- end }}
+    {{- if .Values.ingress.certManager.duration }}
+    cert-manager.io/duration: {{ .Values.ingress.certManager.duration | quote }}
+    {{- end }}
+    {{- if .Values.ingress.certManager.renewBefore }}
+    cert-manager.io/renew-before: {{ .Values.ingress.certManager.renewBefore | quote }}
+    {{- end }}
+    {{- end }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ include "uvoo-minicms.tlsSecretName" . }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.path | quote }}
+            pathType: {{ .Values.ingress.pathType }}
+            backend:
+              service:
+                name: {{ include "uvoo-minicms.fullname" . }}
+                port:
+                  name: http
+{{- end }}
