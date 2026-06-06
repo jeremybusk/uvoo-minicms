@@ -3,6 +3,7 @@ package auth
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -81,5 +82,31 @@ func TestRateLimiterDisabledForZeroOrNegativeLimit(t *testing.T) {
 		if called != 3 {
 			t.Fatalf("limit %d: expected downstream handler to be called 3 times, got %d", limit, called)
 		}
+	}
+}
+
+func TestRateLimiterCapsClientBuckets(t *testing.T) {
+	limiter := NewRateLimiter(1, time.Minute, false)
+	now := time.Now()
+	for i := 0; i < maxRateLimitClients; i++ {
+		limiter.clients[strconv.Itoa(i)] = rateBucket{Count: 1, Reset: now.Add(time.Duration(i+1) * time.Minute)}
+	}
+	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/", nil)
+	req.RemoteAddr = "203.0.113.10:12345"
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", rec.Code)
+	}
+	if len(limiter.clients) != maxRateLimitClients {
+		t.Fatalf("expected client bucket count to stay capped at %d, got %d", maxRateLimitClients, len(limiter.clients))
+	}
+	if _, ok := limiter.clients["0"]; ok {
+		t.Fatal("expected oldest bucket to be evicted")
 	}
 }

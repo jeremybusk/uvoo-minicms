@@ -19,6 +19,7 @@ import (
 	highlighting "github.com/yuin/goldmark-highlighting/v2"
 	"github.com/yuin/goldmark/extension"
 	"uvoo-minicms/internal/db"
+	"uvoo-minicms/internal/httpreq"
 )
 
 type Public struct {
@@ -216,7 +217,7 @@ func (p *Public) serveBlogFeed(w http.ResponseWriter, r *http.Request, settings 
 		http.Error(w, "feed error", 500)
 		return
 	}
-	base := publicBaseURL(r, p.TrustProxy)
+	base := httpreq.BaseURL(r, p.TrustProxy)
 	w.Header().Set("Content-Type", "application/rss+xml; charset=utf-8")
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
@@ -256,41 +257,6 @@ func rssURL(settings db.Settings) string {
 
 func blogFeedPath(settings db.Settings) string {
 	return cleanNavPath(firstNonEmpty(settings.BlogPath, "/blog")) + "/feed.xml"
-}
-
-func publicBaseURL(r *http.Request, trustProxy bool) string {
-	scheme := ""
-	if trustProxy {
-		scheme = strings.ToLower(firstHeaderValue(r.Header.Get("X-Forwarded-Proto")))
-		if scheme != "http" && scheme != "https" {
-			scheme = ""
-		}
-	}
-	if scheme == "" && r.TLS != nil {
-		scheme = "https"
-	}
-	if scheme == "" {
-		scheme = "http"
-	}
-	host := r.Host
-	if trustProxy {
-		forwardedHost := firstHeaderValue(r.Header.Get("X-Forwarded-Host"))
-		if forwardedHost != "" {
-			host = forwardedHost
-		}
-	}
-	return scheme + "://" + host
-}
-
-func firstHeaderValue(raw string) string {
-	if raw == "" {
-		return ""
-	}
-	value := strings.TrimSpace(strings.Split(raw, ",")[0])
-	if strings.ContainsAny(value, "\r\n") {
-		return ""
-	}
-	return value
 }
 
 func absoluteURL(base, path string) string {

@@ -64,6 +64,17 @@ func TestSameOriginUsesForwardedHeadersOnlyWhenTrusted(t *testing.T) {
 	}
 }
 
+func TestSameOriginRejectsMalformedForwardedHost(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "http://internal/cms.v1.CMSService/SavePage", nil)
+	req.Host = "internal"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-Host", "cms.example/path")
+	req.Header.Set("Origin", "https://cms.example")
+	if sameOriginRequest(req, true) {
+		t.Fatal("expected malformed forwarded host to be rejected")
+	}
+}
+
 func TestSameOriginMiddlewareBehindTrustedProxy(t *testing.T) {
 	handler := sameOrigin(true)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
