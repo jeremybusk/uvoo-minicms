@@ -21,6 +21,8 @@ type rateBucket struct {
 	Reset time.Time
 }
 
+const maxRateLimitClients = 4096
+
 func NewRateLimiter(limit int, window time.Duration, trustProxy bool) *RateLimiter {
 	if window <= 0 {
 		window = time.Minute
@@ -55,15 +57,18 @@ func (l *RateLimiter) check(r *http.Request) (bool, int, time.Time) {
 	now := time.Now()
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if _, ok := l.clients[key]; !ok && len(l.clients) >= maxRateLimitClients {
+		l.pruneLocked(now)
+		if len(l.clients) >= maxRateLimitClients {
+			l.dropOldestLocked()
+		}
+	}
 	bucket := l.clients[key]
 	if bucket.Reset.IsZero() || now.After(bucket.Reset) {
 		bucket = rateBucket{Reset: now.Add(l.Window)}
 	}
 	bucket.Count++
 	l.clients[key] = bucket
-	if len(l.clients) > 4096 {
-		l.pruneLocked(now)
-	}
 	remaining := l.Limit - bucket.Count
 	if remaining < 0 {
 		remaining = 0
@@ -76,5 +81,19 @@ func (l *RateLimiter) pruneLocked(now time.Time) {
 		if now.After(bucket.Reset) {
 			delete(l.clients, key)
 		}
+	}
+}
+
+func (l *RateLimiter) dropOldestLocked() {
+	var oldestKey string
+	var oldestReset time.Time
+	for key, bucket := range l.clients {
+		if oldestKey == "" || bucket.Reset.Before(oldestReset) {
+			oldestKey = key
+			oldestReset = bucket.Reset
+		}
+	}
+	if oldestKey != "" {
+		delete(l.clients, oldestKey)
 	}
 }

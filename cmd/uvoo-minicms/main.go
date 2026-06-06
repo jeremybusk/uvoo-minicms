@@ -18,6 +18,7 @@ import (
 	"uvoo-minicms/internal/config"
 	"uvoo-minicms/internal/db"
 	"uvoo-minicms/internal/geo"
+	"uvoo-minicms/internal/httpreq"
 	"uvoo-minicms/internal/service"
 	"uvoo-minicms/internal/web"
 )
@@ -112,20 +113,10 @@ func contentSecurityPolicy() string {
 }
 
 func setHSTSHeader(w http.ResponseWriter, r *http.Request, enabled bool, maxAge int, trustProxy bool) {
-	if !enabled || maxAge <= 0 || !requestIsHTTPS(r, trustProxy) {
+	if !enabled || maxAge <= 0 || !httpreq.IsHTTPS(r, trustProxy) {
 		return
 	}
 	w.Header().Set("Strict-Transport-Security", "max-age="+strconv.Itoa(maxAge))
-}
-
-func requestIsHTTPS(r *http.Request, trustProxy bool) bool {
-	if r.TLS != nil {
-		return true
-	}
-	if !trustProxy {
-		return false
-	}
-	return strings.EqualFold(firstHeaderValue(r.Header.Get("X-Forwarded-Proto")), "https")
 }
 
 func cacheUploads(next http.Handler) http.Handler {
@@ -159,7 +150,7 @@ func sameOrigin(trustProxy bool) mw {
 }
 
 func sameOriginRequest(r *http.Request, trustProxy bool) bool {
-	expected := requestBaseURL(r, trustProxy)
+	expected := httpreq.BaseURL(r, trustProxy)
 	for _, raw := range []string{r.Header.Get("Origin"), r.Header.Get("Referer")} {
 		raw = strings.TrimSpace(raw)
 		if raw == "" {
@@ -169,46 +160,16 @@ func sameOriginRequest(r *http.Request, trustProxy bool) bool {
 		if err != nil || u.Scheme == "" || u.Host == "" {
 			return false
 		}
-		if strings.EqualFold(u.Scheme+"://"+u.Host, expected) {
+		host := httpreq.CleanHost(u.Host)
+		if host == "" {
+			return false
+		}
+		if strings.EqualFold(u.Scheme+"://"+host, expected) {
 			return true
 		}
 		return false
 	}
 	return true
-}
-
-func requestBaseURL(r *http.Request, trustProxy bool) string {
-	scheme := ""
-	if trustProxy {
-		scheme = strings.ToLower(firstHeaderValue(r.Header.Get("X-Forwarded-Proto")))
-		if scheme != "http" && scheme != "https" {
-			scheme = ""
-		}
-	}
-	if scheme == "" && r.TLS != nil {
-		scheme = "https"
-	}
-	if scheme == "" {
-		scheme = "http"
-	}
-	host := r.Host
-	if trustProxy {
-		if forwardedHost := firstHeaderValue(r.Header.Get("X-Forwarded-Host")); forwardedHost != "" {
-			host = forwardedHost
-		}
-	}
-	return scheme + "://" + host
-}
-
-func firstHeaderValue(raw string) string {
-	if raw == "" {
-		return ""
-	}
-	value := strings.TrimSpace(strings.Split(raw, ",")[0])
-	if strings.ContainsAny(value, "\r\n") {
-		return ""
-	}
-	return value
 }
 
 func must(err error) {

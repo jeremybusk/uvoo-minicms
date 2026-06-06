@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"uvoo-minicms/internal/db"
+	"uvoo-minicms/internal/httpreq"
 )
 
 func TestYouTubeID(t *testing.T) {
@@ -328,10 +329,10 @@ func TestPublicBaseURLOnlyTrustsForwardedHeadersWhenEnabled(t *testing.T) {
 	req.Header.Set("X-Forwarded-Proto", "https")
 	req.Header.Set("X-Forwarded-Host", "public.example")
 
-	if got := publicBaseURL(req, false); got != "http://internal.test" {
+	if got := httpreq.BaseURL(req, false); got != "http://internal.test" {
 		t.Fatalf("expected untrusted forwarded headers to be ignored, got %q", got)
 	}
-	if got := publicBaseURL(req, true); got != "https://public.example" {
+	if got := httpreq.BaseURL(req, true); got != "https://public.example" {
 		t.Fatalf("expected trusted forwarded headers to be used, got %q", got)
 	}
 }
